@@ -1,9 +1,45 @@
+/*-----------------------------------------------------------------------*/
+/*----------------------------    LICENSE    ----------------------------*/
+/*-----------------------------------------------------------------------*/
+/* This file is part of the music_tagger program                         */
+/* (https://github.com/jonsim/music_tagger).                             */
+/*                                                                       */
+/* Foobar is free software: you can redistribute it and/or modify        */
+/* it under the terms of the GNU General Public License as published by  */
+/* the Free Software Foundation, either version 3 of the License, or     */
+/* (at your option) any later version.                                   */
+/*                                                                       */
+/* Foobar is distributed in the hope that it will be useful,             */
+/* but WITHOUT ANY WARRANTY; without even the implied warranty of        */
+/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         */
+/* GNU General Public License for more details.                          */
+/*                                                                       */
+/* You should have received a copy of the GNU General Public License     */
+/* along with Foobar.  If not, see <http://www.gnu.org/licenses/>.       */
+/*-----------------------------------------------------------------------*/
+
+
+/*-----------------------------------------------------------------------*/
+/*----------------------------     ABOUT     ----------------------------*/
+/*-----------------------------------------------------------------------*/
+/* A small program to tidy music files. It recursively explores a given  */
+/* directory and standardises folder structures, file naming conventions */
+/* and ID3 tags.                                                         */
+/* Author: Jonathan Simmonds                                             */
+/*-----------------------------------------------------------------------*/
+
+
+/*-----------------------------------------------------------------------*/
+/*---------------------------    INCLUDES    ----------------------------*/
+/*-----------------------------------------------------------------------*/
 #include "renamer.h"
 
 
 
-/*////////// LIST FUNCTIONS //////////*/
 
+/*-----------------------------------------------------------------------*/
+/*------------------------    LIST FUNCTIONS    -------------------------*/
+/*-----------------------------------------------------------------------*/
 /* adds an element to a list, copying the contents of the char* passed to it,
    returning a pointer to the new head*/
 list* addList (list* existing, char* folder_insert, char* file_insert)
@@ -21,7 +57,6 @@ list* addList (list* existing, char* folder_insert, char* file_insert)
 
 	return new;
 }
-
 
 
 /* prints the elements in a list, aligned by the longest folder name */
@@ -44,13 +79,11 @@ int printListAlignedR (list* l, int max)
 }
 
 
-
 /* calls the recursive version of the function (above) */
 void printListAligned (list* l)
 {
 	printListAlignedR (l, 0);
 }
-
 
 
 /* prints the elements in a list */
@@ -64,9 +97,9 @@ void printList (list* l)
 
 
 
-
-/*////////// SPLITLIST FUNCTIONS //////////*/
-
+/*-----------------------------------------------------------------------*/
+/*----------------------    SPLITLIST FUNCTIONS    ----------------------*/
+/*-----------------------------------------------------------------------*/
 /* adds a new element (char*) to a splitlist (which is doubly linked), returning
    a pointer to the new head */
 splitlist* addSplit (splitlist* existing, char* to_insert)
@@ -81,7 +114,6 @@ splitlist* addSplit (splitlist* existing, char* to_insert)
 
 	return new;
 }
-
 
 
 /* removes an element from a splitlist (which is double linked), returning a
@@ -102,7 +134,6 @@ splitlist* removeSplit (splitlist* to_remove)
 }
 
 
-
 /* rewinds a splitlist to the first element (this is the reason the splitlist is
    doubly linked)  */
 splitlist* rewindSplit (splitlist* l)
@@ -115,7 +146,6 @@ splitlist* rewindSplit (splitlist* l)
 }
 
 
-
 /* prints the elements in a splitlist */
 void printSplit (splitlist* l)
 {
@@ -125,7 +155,6 @@ void printSplit (splitlist* l)
 }
 
 
-
 /* copies splitlist current into splitlist new */
 void splitCopy (splitlist** new, splitlist* current)
 {
@@ -133,7 +162,6 @@ void splitCopy (splitlist** new, splitlist* current)
 		splitCopy (new, current->next);
 	*new = addSplit(*new, current->s);
 }
-
 
 
 /* splits a string given on character c, returning a splitlist of elements */
@@ -173,7 +201,6 @@ splitlist* split (char* s, char c)
 }
 
 
-
 /* splits a list of strings on character c, returning an array of splitlists.
    the length of the array returned is saved into result_len */
 splitlist** splitAll (list* l, char c, int* result_len)
@@ -205,9 +232,9 @@ splitlist** splitAll (list* l, char c, int* result_len)
 
 
 
-
-/*////////// STACK FUNCTIONS //////////*/
-
+/*-----------------------------------------------------------------------*/
+/*------------------------    STACK FUNCTIONS    ------------------------*/
+/*-----------------------------------------------------------------------*/
 /* pushes an item onto the stack, forming it by concatenating char arrays x and
    y together with a '/' between them (i.e. building a file path) */
 void push (stack* s, char* x, char* y)
@@ -232,7 +259,6 @@ void push (stack* s, char* x, char* y)
 }
 
 
-
 /* pops an item off the stack, modifying the stack* given to reflect the pop,
    and returning the element popped off */
 char* pop (stack* s)
@@ -249,8 +275,9 @@ char* pop (stack* s)
 
 
 
-/*////////// PROGRAM FUNCTIONS //////////*/
-
+/*-----------------------------------------------------------------------*/
+/*-----------------------    PROGRAM FUNCTIONS    -----------------------*/
+/*-----------------------------------------------------------------------*/
 /* description */
 list* loadFolders (char* start_dir)
 {
@@ -298,7 +325,6 @@ list* loadFolders (char* start_dir)
 }
 
 
-
 /* description */
 void readDirectory (list** new_list, list** current_list)
 {
@@ -322,7 +348,6 @@ void readDirectory (list** new_list, list** current_list)
 }
 
 
-
 /* for all words in the list, replace the last '.', all '_' and '-' with spaces,
    then remove duplicate spaces before finally fixing the capitalisation */
 void renameFiles (list** l)
@@ -342,7 +367,6 @@ void renameFiles (list** l)
 	
 	*l = l_start;
 }
-
 
 
 /* description */
@@ -426,8 +450,12 @@ void removeCommonWords (splitlist** sl, int sl_len)
 
 
 
-/*////////// MAIN FUNCTION //////////*/
 
+/*-----------------------------------------------------------------------*/
+/*-------------------------    MAIN FUNCTION    -------------------------*/
+/*-----------------------------------------------------------------------*/
+/* not entirely sure what this is doing here, looks like a remnant of some
+   unit testing. can probably be safetly removed. */
 /*  if (test)
 	{
 		printf("\nRunning renamer on the folder '%s' would produce the following output.\nCheck this is sane and use the -f argument to apply the changes:\n\n", start_dir);
