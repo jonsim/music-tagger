@@ -33,3 +33,11 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# music files
+*.mp3
+
+# specific to my repository
+avenged.sevenfold/*
+story of the year/*
+yet another artist/*
