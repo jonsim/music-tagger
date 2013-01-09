@@ -74,7 +74,7 @@ class MusicFile:
         # Attemtpt to collect information from the file's path (the album / artist).
         file_path_split = file_path.split("/")
         # If correctly set up: -1 holds the file name; -2 the album folder; -3 the artist folder.
-        if file_path_split >= 3:
+        if len(file_path_split) >= 3:
             candidate_album_name = clean_string(file_path_split[-2])
             if re.match('\[\d\d\d\d\] ', candidate_album_name) != None:
                 self.album_name = candidate_album_name[7:]
@@ -95,9 +95,9 @@ class MusicFile:
     
     def __str__ (self):
         if self.album_year > 0:
-            return "#%02d '%s' - '%s' by '%s' in %d." % (self.track_number, self.track_name, self.album_name, self.album_artist, self.album_year)
+            return "#%02d '%s' - '%s' by '%s' in %d." % (self.track_number, self.track_name, self.album_name, self.artist_name, self.album_year)
         else:
-            return "#%02d '%s' - '%s' by '%s'."       % (self.track_number, self.track_name, self.album_name, self.album_artist)
+            return "#%02d '%s' - '%s' by '%s'."       % (self.track_number, self.track_name, self.album_name, self.artist_name)
     
     
     def write_to_ID3_tag ():
@@ -109,6 +109,201 @@ class MusicFile:
 #-----------------------------------------------------------------------#
 #----------------------    FUNCTION DEFINITIONS    ---------------------#
 #-----------------------------------------------------------------------#
+# Strips extraneous whitespace and null bytes from some given data, leaving a string.
+def strip_null_bytes (data):
+    return data.replace("\00", "").strip()
+
+
+# Packs a given string into a given number of bytes and null terminates it. This is
+# achieved either by truncating (when too long) or adding null bytes (when too short).
+def pack_null_bytes (string, length):
+    if len(string) >= length-1:
+        data = string[:length-1] + '\00'
+    else:
+        data = string + ('\00' * (length - len(string)))
+    return data
+
+
+# Reads the ID3v1 tag data from a file (if present). ID3 v1.0 and v1.1 tags are supported along with extended tags.
+def read_id3_v1_tag (file_path):
+    with open(file_path, "rb", 0) as f:
+        f.seek(-(128+227), 2)         # go to the (128+227)th byte before the end
+        tagx_data = f.read(227)  # read the 227 bytes that would make up the extended id3v1 tag.
+        tag_data  = f.read(128)  # read the final 128 bytes that would make up the id3v1 tag.
+        
+        # see what juicy goodies we have.
+        if tag_data[:3] == "TAG":
+            # either id3 v1.0 or v1.1
+            title  = strip_null_bytes(tag_data[ 3:33])
+            artist = strip_null_bytes(tag_data[33:63])
+            album  = strip_null_bytes(tag_data[63:93])
+            year = 0
+            if tag_data[93:97] != "\00\00\00\00":
+                year = int(strip_null_bytes(tag_data[93:97]))
+            genre  = ord(tag_data[127])
+            if ord(tag_data[125]) == 0 and ord(tag_data[126]) != 0:
+                # id3 v1.1
+                comment = strip_null_bytes(tag_data[97:125])
+                track_number = ord(tag_data[126])
+                print "ID3v1.1   tag found: '%s' - '%s' by '%s' in %d, track %d, genre %d" % (title, album, artist, year, track_number, genre)
+            else:
+                # id3 v1.0
+                comment = strip_null_bytes(tag_data[97:127])
+                print "ID3v1.0   tag found: '%s' - '%s' by '%s' in %d, genre %d" % (title, album, artist, year, genre)
+            # check for extended tag and, if found, add its stuff to the data.
+            if tagx_data[:4] == "TAG+":
+                title  += strip_null_bytes(tagx_data[  4: 64])
+                artist += strip_null_bytes(tagx_data[ 64:124])
+                album  += strip_null_bytes(tagx_data[124:184])
+        else:
+            print "No ID3v1 tag found."
+
+
+# Writes the ID3v1.1 tag to a file (overwriting if present, appending if not).
+def write_id3_v1_tag (input_file_path, output_song_data, output_file_path=""):
+    global force_mode
+    
+    # if no output_file_path is given set it to the input_file_path (i.e. rewrite the input's tag).
+    if output_file_path == "":
+        output_file_path = input_file_path
+    if output_file_path == input_file_path and not force_mode:
+        raise Exception("write_id3_v1_tag called and instructed to write over the file, however force mode (-f) is not enabled.")
+    
+    # read the entire input file in.
+    with open(input_file_path, "rb") as f:
+        track_data = f.read()
+    
+    # check what existing id3v1 tag we have (if any), and if so purge it.
+    if track_data[-128:-125] == "TAG":                      # check for v1.0/v1.1
+        if track_data[-(128+227):-(128+227-4)] == "TAG+":   # check for v1.0 extended
+            track_data = track_data[:-(128+227)]
+        else:
+            track_data = track_data[:-128]
+    
+    # create our new id3v1.1 tag and add it to the track data.
+    genre = 255
+    if output_song_data.album_year == 0:
+        year_string = '\00' * 4
+    else:
+        year_string = str(output_song_data.album_year)
+    # 3 B header, 30 B title, artist, album, 4 B year string, 28 B comment, zero-byte (signifying v1.1), 1 B track, 1 B genre
+    new_tag = "TAG" + pack_null_bytes(output_song_data.track_name,  30) \
+                    + pack_null_bytes(output_song_data.artist_name, 30) \
+                    + pack_null_bytes(output_song_data.album_name,  30) \
+                    + year_string                                       \
+                    + '\00' * 28                                        \
+                    + '\00'                                             \
+                    + chr(output_song_data.track_number)                \
+                    + chr(genre)                                        
+    print "created new tag, size " + str(len(new_tag)) + " bytes"
+    track_data += new_tag
+    
+    # write the result to the output file.
+    with open(output_file_path, "wb") as f:
+        f.write(track_data)
+
+
+# Reads the ID3v2 tag data from a file (if present).
+def read_id3_v2_tag (file_path):
+    with open(file_path, "rb", 0) as f:
+        header_data = f.read(10)
+        
+        # see what juicy goodies we have
+        if header_data[:3] == "ID3":
+            # check its not messed up
+            if ord(header_data[3]) == 0xFF or ord(header_data[4]) == 0xFF or ord(header_data[6]) >= 0x80 or ord(header_data[7]) >= 0x80 or ord(header_data[8]) >= 0x80 or ord(header_data[9]) >= 0x80:
+                print "corrupted tag found, exitting."
+                return
+            # Collect the tag header info. The tag_size is the complete ID3v2 tag size, minus the 
+            # header (but not the extended header if one exists). Thus tag_size = total_tag_size - 10.
+            tag_size = (ord(header_data[6]) << 21) + (ord(header_data[7]) << 14) + (ord(header_data[8]) << 7) + (ord(header_data[9]))
+            #print "found ID3v2.%d.%d tag (size %d bytes)" % (ord(header_data[3]), ord(header_data[4]), tag_size)
+            version_string = "ID3v2.%d.%d" % (ord(header_data[3]), ord(header_data[4]))
+            
+            # Read the frames
+            total_read_size = 10
+            album = ""
+            title = ""
+            artist = ""
+            track_number = ""
+            year = ""
+            while (total_read_size < tag_size+10):
+                # Collect the frame header info. the frame_size is the size of the frame, minus the
+                # header. Thus frame_size = total_frame_size - 10.
+                f.seek(total_read_size, 0)
+                frame_header_data = f.read(10)
+                if frame_header_data[0] == '\00':
+                    # If we have read a null byte we have reached the end of the ID3 tag. It turns 
+                    # out the majority of ID3 tags are heavily padded and are actually significantly 
+                    # longer than it needs to be so that editors can modify it without having to 
+                    # rewrite the entire MP3 file. This is poorly documented and, to me, really 
+                    # arcane - I can't see why you would want to avoid having to rewrite the whole 
+                    # file. The ID3 tags I have tested are typically between 500 and 1000 bytes 
+                    # while around 4200 bytes is actually allocated.
+                    break
+                frame_id = frame_header_data[0:4]
+                frame_size = (ord(frame_header_data[4]) << 24) + (ord(frame_header_data[5]) << 16) + (ord(frame_header_data[6]) << 8) + (ord(frame_header_data[7]))
+                #print "  Frame ID: %s, size %d bytes" % (frame_id, frame_size)
+                total_read_size += 10 + frame_size
+                # Collect frame info
+                if frame_id == "TALB":
+                    album = f.read(frame_size)[1:]
+                elif frame_id == "TIT2":
+                    title = f.read(frame_size)[1:]
+                elif frame_id == "TPE1":
+                    artist = f.read(frame_size)[1:]
+                elif frame_id == "TRCK":
+                    track_number = int(f.read(frame_size)[1:].split('/')[0])
+                elif frame_id == "TYER":
+                    year = int(f.read(frame_size)[1:])
+            print "%s tag found: '%s' - '%s' by '%s' in %d, track %d" % (version_string, title, album, artist, year, track_number)
+        else:
+            print "No ID3v2 tag found."
+
+
+# Writes the ID3v2.x tag to a file (overwriting if present, inserting if not).
+def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
+    global force_mode
+    
+    # if no output_file_path is given set it to the input_file_path (i.e. rewrite the input's tag).
+    if output_file_path == "":
+        output_file_path = input_file_path
+    if output_file_path == input_file_path and not force_mode:
+        raise Exception("write_id3_v2_tag called and instructed to write over the file, however force mode (-f) is not enabled.")
+    
+    # read the entire input file in.
+    with open(input_file_path, "rb") as f:
+        track_data = f.read()
+    
+    # check what existing id3v2 tag we have (if any), and if so purge it.
+    if track_data[:3] == "ID3":
+        # check its not messed up
+        if ord(track_data[3]) == 0xFF or ord(track_data[4]) == 0xFF or ord(track_data[6]) >= 0x80 or ord(track_data[7]) >= 0x80 or ord(track_data[8]) >= 0x80 or ord(track_data[9]) >= 0x80:
+            raise Exception("write_id3_v2_tag called on a file with a corrupted id3v2 tag, meaning the tag size cannot be easily calculated. Exitting.")
+        # Collect the tag header info. The tag_size is the complete ID3v2 tag size, minus the 
+        # header (but not the extended header if one exists). Thus tag_size = total_tag_size - 10.
+        tag_size = (ord(track_data[6]) << 21) + (ord(track_data[7]) << 14) + (ord(track_data[8]) << 7) + (ord(track_data[9]))
+        tag_data   = track_data[:tag_size+10]
+        track_data = track_data[tag_size+10:]
+    
+    # cut the bits that we are going to replace out of the old tag (thus keeping previous tag frames an
+    # important consideration as some programs (i.e. windows media player) store their own data in them).
+    total_read_size = 10
+    new_tag = ""
+    while (total_read_size < tag_size+10):
+        if tag_data[total_read_size] == '\00':
+            break
+        frame_id = tag_data[total_read_size:total_read_size+4]
+        frame_size = (ord(tag_data[total_read_size+4]) << 24) + (ord(tag_data[total_read_size+5]) << 16) + (ord(tag_data[total_read_size+6]) << 8) + (ord(tag_data[total_read_size+7]))
+        if frame_id != "TALB" and frame_id != "TIT2" and frame_id != "TPE1" and frame_id != "TRCK" and frame_id != "TYER":
+            new_tag += tag_data[total_read_size:total_read_size+10+frame_size]
+        total_read_size += 10 + frame_size
+    
+    # add the new data into the tag
+    
+    # write to the output file
+
+
 # for all words in the list, replace all but the last '.', all '_' and '-' with spaces, then remove 
 # duplicate spaces before finally fixing the capitalisation.
 def clean_string (s):
@@ -206,123 +401,22 @@ def clean_folder (file_list):
     return cleaned_file_list
 
 
-# strips extraneous whitespace and null bytes
-def strip_null_bytes (data):
-    return data.replace("\00", "").strip()
-
-
-# Reads the ID3 v1 tag data from a file (if present). ID3 v1.0, v1.1 and extended tags are supported.
-def read_id3_v1_tag (file_path):
-    with open(file_path, "rb", 0) as f:
-        f.seek(-128, 2)         # go to the 128th byte before the end
-        tag_data = f.read(128)  # read the final 128 bytes
-        
-        # see what juicy goodies we have
-        if tag_data[:3] == "TAG":
-            if tag_data[3] == '+':
-                # extended id3 v1.0
-                title  = strip_null_bytes(tag_data[  4: 64])
-                artist = strip_null_bytes(tag_data[ 64:124])
-                album  = strip_null_bytes(tag_data[124:184])
-                speed  = ord(tag_data[184])
-                genre  = strip_null_bytes(tag_data[185:215])
-                start_time = tag_data[215:221]
-                end_time   = tag_data[221:227]
-                print "ID3v1.0+  tag found: '%s' - '%s' by '%s', genre %d" % (title, album, artist, genre)
-            else:
-                # either id3 v1.0 or v1.1
-                title  = strip_null_bytes(tag_data[ 3:33])
-                artist = strip_null_bytes(tag_data[33:63])
-                album  = strip_null_bytes(tag_data[63:93])
-                year   = int(strip_null_bytes(tag_data[93:97]))
-                genre  = ord(tag_data[127])
-                if ord(tag_data[125]) == 0 and ord(tag_data[126]) != 0:
-                    # id3 v1.1
-                    comment = strip_null_bytes(tag_data[97:125])
-                    track_number = ord(tag_data[126])
-                    print "ID3v1.1   tag found: '%s' - '%s' by '%s' in %d, track %d, genre %d" % (title, album, artist, year, track_number, genre)
-                else:
-                    # id3 v1.0
-                    comment = strip_null_bytes(tag_data[97:127])
-                    print "ID3v1.0   tag found: '%s' - '%s' by '%s' in %d, genre %d" % (title, album, artist, year, genre)
-        else:
-            print "No ID3v1 tag found."
-
-
-# Reads the ID3 v2 tag data from a file (if present).
-def read_id3_v2_tag (file_path):
-    with open(file_path, "rb", 0) as f:
-        header_data = f.read(10)
-        
-        # see what juicy goodies we have
-        if header_data[:3] == "ID3":
-            # check its not messed up
-            if ord(header_data[3]) == 0xFF or ord(header_data[4]) == 0xFF or ord(header_data[6]) >= 0x80 or ord(header_data[7]) >= 0x80 or ord(header_data[8]) >= 0x80 or ord(header_data[9]) >= 0x80:
-                print "corrupted tag found, exitting."
-                return
-            # Collect the tag header info. The tag_size is the complete ID3v2 tag size, minus the 
-            # header (but not the extended header if one exists). Thus tag_size = total_tag_size - 10.
-            tag_size = (ord(header_data[6]) << 21) + (ord(header_data[7]) << 14) + (ord(header_data[8]) << 7) + (ord(header_data[9]))
-            #print "found ID3v2.%d.%d tag (size %d bytes)" % (ord(header_data[3]), ord(header_data[4]), tag_size)
-            version_string = "ID3v2.%d.%d" % (ord(header_data[3]), ord(header_data[4]))
-            
-            # Read the frames
-            total_read_size = 10
-            album = ""
-            title = ""
-            artist = ""
-            track_number = ""
-            year = ""
-            while (total_read_size < tag_size+10):
-                # Collect the frame header info. the frame_size is the size of the frame, minus the
-                # header. Thus frame_size = total_frame_size - 10.
-                f.seek(total_read_size, 0)
-                frame_header_data = f.read(10)
-                if frame_header_data[0] == '\00':
-                    # If we have read a null byte we have reached the end of the ID3 tag. It turns 
-                    # out the majority of ID3 tags are heavily padded and are actually significantly 
-                    # longer than it needs to be so that editors can modify it without having to 
-                    # rewrite the entire MP3 file. This is poorly documented and, to me, really 
-                    # arcane - I can't see why you would want to avoid having to rewrite the whole 
-                    # file. The ID3 tags I have tested are typically between 500 and 1000 bytes 
-                    # while around 4200 bytes is actually allocated.
-                    break
-                frame_id = frame_header_data[0:4]
-                frame_size = (ord(frame_header_data[4]) << 24) + (ord(frame_header_data[5]) << 16) + (ord(frame_header_data[6]) << 8) + (ord(frame_header_data[7]))
-                #print "  Frame ID: %s, size %d bytes" % (frame_id, frame_size)
-                total_read_size += 10 + frame_size
-                # Collect frame info
-                if frame_id == "TALB":
-                    album = f.read(frame_size)[1:]
-                elif frame_id == "TIT2":
-                    title = f.read(frame_size)[1:]
-                elif frame_id == "TPE1":
-                    artist = f.read(frame_size)[1:]
-                elif frame_id == "TRCK":
-                    track_number = int(f.read(frame_size)[1:].split('/')[0])
-                elif frame_id == "TYER":
-                    year = int(f.read(frame_size)[1:])
-            print "%s tag found: '%s' - '%s' by '%s' in %d, track %d" % (version_string, title, album, artist, year, track_number)
-        else:
-            print "No ID3v2 tag found."
-
-
 
 
 #-----------------------------------------------------------------------#
 #---------------------------    MAIN CODE    ---------------------------#
 #-----------------------------------------------------------------------#
 # Parse command line arguments
-verbose_mode = 0
-force_mode   = 0
+verbose_mode = False
+force_mode   = False
 base_folder  = ""
 if len(sys.argv) > 1:
     base_folder = sys.argv[1]
     for i in range(2, len(sys.argv)):
         if sys.argv[i] == '-v':
-            verbose_mode = 1
+            verbose_mode = True
         elif sys.argv[i] == '-f':
-            force_mode = 1
+            force_mode = True
 # check for a valid input
 if (base_folder == ""):
     print "Error: The program must be run on a folder, with the form:\n./music_tagger FOLDER [-f] [-v]\n  -f - write changes.\n  -v - verbose mode.\nSystem exiting."
@@ -382,6 +476,11 @@ for dirname, subdirnames, filenames in os.walk(base_folder):
             print "Created: " + str(new_song)
             read_id3_v1_tag(file_path)
             read_id3_v2_tag(file_path)
+            #print "writing to " + file_path
+            #new_song.track_name = "lol dis is a song"
+            #new_song.track_number = 3
+            #write_id3_v1_tag(file_path, new_song, file_path+".mp3")
+            write_id3_v2_tag(file_path, new_song, file_path+".mp3")
             print ""
 print "-------"
 

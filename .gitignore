@@ -42,7 +42,4 @@ nosetests.xml
 old_c_code/organize
 
 # specific to my repository
-avenged.sevenfold/*
-story of the year/*
-yet another artist/*
-old_c_code/album/*
+test_structure/*
