@@ -196,9 +196,9 @@ def write_id3_v1_tag (input_file_path, output_song_data, output_file_path=""):
                     + chr(output_song_data.track_number)                \
                     + chr(genre)                                        
     print "created new tag, size " + str(len(new_tag)) + " bytes"
-    track_data += new_tag
     
     # write the result to the output file.
+    track_data += new_tag
     with open(output_file_path, "wb") as f:
         f.write(track_data)
 
@@ -261,6 +261,24 @@ def read_id3_v2_tag (file_path):
             print "No ID3v2 tag found."
 
 
+# Constructs an id3v2 text content frame using the frame_id given and the frame content (a string)
+def write_id3_v2_frame (frame_id, frame_content):
+    size = len(frame_content) + 2       # encoding mark + content + null termination
+    size_b1 = (size >> 24) % 256
+    size_b2 = (size >> 16) % 256
+    size_b3 = (size >>  8) % 256
+    size_b4 = size         % 256
+    size_string = chr(size_b1) + chr(size_b2) + chr(size_b3) + chr(size_b4)
+    flag_string = chr(0) + chr(0)
+    frame = frame_id
+    frame += size_string
+    frame += flag_string
+    frame += '\00'      # encoding mark (ISO-8859-1)
+    frame += frame_content
+    frame += '\00'
+    return frame
+
+
 # Writes the ID3v2.x tag to a file (overwriting if present, inserting if not).
 def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
     global force_mode
@@ -275,33 +293,72 @@ def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
     with open(input_file_path, "rb") as f:
         track_data = f.read()
     
-    # check what existing id3v2 tag we have (if any), and if so purge it.
+    # check what existing id3v2 tag we have (if any). if we have one, separate the track from it.
+    had_id3v2_tag = False
     if track_data[:3] == "ID3":
+        had_id3v2_tag = True
         # check its not messed up
         if ord(track_data[3]) == 0xFF or ord(track_data[4]) == 0xFF or ord(track_data[6]) >= 0x80 or ord(track_data[7]) >= 0x80 or ord(track_data[8]) >= 0x80 or ord(track_data[9]) >= 0x80:
-            raise Exception("write_id3_v2_tag called on a file with a corrupted id3v2 tag, meaning the tag size cannot be easily calculated. Exitting.")
+            raise Exception("write_id3_v2_tag called on a file with a corrupted id3v2 tag. Exitting.")
         # Collect the tag header info. The tag_size is the complete ID3v2 tag size, minus the 
         # header (but not the extended header if one exists). Thus tag_size = total_tag_size - 10.
         tag_size = (ord(track_data[6]) << 21) + (ord(track_data[7]) << 14) + (ord(track_data[8]) << 7) + (ord(track_data[9]))
         tag_data   = track_data[:tag_size+10]
         track_data = track_data[tag_size+10:]
     
-    # cut the bits that we are going to replace out of the old tag (thus keeping previous tag frames an
-    # important consideration as some programs (i.e. windows media player) store their own data in them).
-    total_read_size = 10
-    new_tag = ""
-    while (total_read_size < tag_size+10):
-        if tag_data[total_read_size] == '\00':
-            break
-        frame_id = tag_data[total_read_size:total_read_size+4]
-        frame_size = (ord(tag_data[total_read_size+4]) << 24) + (ord(tag_data[total_read_size+5]) << 16) + (ord(tag_data[total_read_size+6]) << 8) + (ord(tag_data[total_read_size+7]))
-        if frame_id != "TALB" and frame_id != "TIT2" and frame_id != "TPE1" and frame_id != "TRCK" and frame_id != "TYER":
-            new_tag += tag_data[total_read_size:total_read_size+10+frame_size]
-        total_read_size += 10 + frame_size
-    
-    # add the new data into the tag
+    # create a new tag and add our data to it
+    # write the frames to it (we do this before we write the header so we can calculate the size)
+    new_frames =  write_id3_v2_frame("TIT2", output_song_data.track_name)
+    new_frames += write_id3_v2_frame("TALB", output_song_data.album_name)
+    new_frames += write_id3_v2_frame("TPE1", output_song_data.artist_name)
+    if output_song_data.track_number > 0:
+        new_frames += write_id3_v2_frame("TRCK", str(output_song_data.track_number))
+    if output_song_data.album_year > 0:
+        new_frames += write_id3_v2_frame("TYER", str(output_song_data.album_year))
+    # if we had an id3v2 tag before, copy the frames that we are not going to replace over from it. 
+    # This leaves frames we aren't updating unchanged - an important consideration as some programs 
+    # (i.e. windows media player) store their own data in them and in some cases the frames will 
+    # store user data which will have taken some time to generate/collect, e.g. the POPM tag (though 
+    # this is far from a standard itself).
+    if had_id3v2_tag:
+        total_read_size = 10
+        while (total_read_size < tag_size+10):      # ONLY IF WE HAVE ONE DOOFUS
+            if tag_data[total_read_size] == '\00':
+                break
+            frame_id = tag_data[total_read_size:total_read_size+4]
+            frame_size = (ord(tag_data[total_read_size+4]) << 24) + (ord(tag_data[total_read_size+5]) << 16) + (ord(tag_data[total_read_size+6]) << 8) + (ord(tag_data[total_read_size+7]))
+            # Note: This if statement could be extended to include other frames to be left out, or even
+            # replaced with just PRIV frames (UFID and POPM should probably also be kept as they contain
+            # information which will have been generated by other media players and is not easily
+            # reproduceable). For now I have chosen to err on the side of caution and leave all other 
+            # frames intact, but for a completely clean and identically tagged music collection this is
+            # an option.
+            if frame_id != "TALB" and frame_id != "TIT2" and frame_id != "TPE1" and frame_id != "TRCK" and frame_id != "TYER":
+                new_frames += tag_data[total_read_size:total_read_size+10+frame_size]
+            total_read_size += 10 + frame_size
+    # calculate the size and add padding (I don't really like this approach, but I guess there's a 
+    # reason all the tracks I tested include large amounts of padding so I will re-pad). Doing it at
+    # this stage leaves the option to have the amount of padding added dependent on the tag size.
+    # For now simply add 500 bytes of padding.
+    #size = len(new_frames)
+    new_frames += '\00' * 500
+    size = len(new_frames)
+    # produce the size string
+    size_b1 = (size >> 21) % 128
+    size_b2 = (size >> 14) % 128
+    size_b3 = (size >>  7) % 128
+    size_b4 = size         % 128
+    size_string = chr(size_b1) + chr(size_b2) + chr(size_b3) + chr(size_b4)
+    # write the header
+    new_header =  "ID3"                # tag identifier
+    new_header += chr(3) + chr(0)      # tag version number (v2.3.0)
+    new_header += chr(0)               # flags
+    new_header += size_string
     
     # write to the output file
+    track_data = new_header + new_frames + track_data
+    with open(output_file_path, "wb") as f:
+        f.write(track_data)
 
 
 # for all words in the list, replace all but the last '.', all '_' and '-' with spaces, then remove 
@@ -424,46 +481,7 @@ if (base_folder == ""):
 
 # traverse all folders (dirname gives the path to the current directory, dirnames gives the list of
 # subdirectories in the folder, filenames gives the list of files in the folder).
-#print "--------------------"
-walk_results = os.walk(base_folder)
-#wr1, wr2, wr3 = walk_results
-"""
-print "1------"
-for dirname, dirnames, filenames in walk_results:
-    print "directory: " + dirname
-    print "  subdirectories:"
-    for subdirname in dirnames:
-        print "    " + os.path.join(dirname, subdirname)
-    print "  files:"
-    for filename in filenames:
-        print "    " + os.path.join(dirname, filename)
-print "-------"
-
-
-# clean lol
-print "2------"
-walk_results = os.walk(base_folder)
-#for dirname, dirnames, filenames in wr1, wr2, wr3:
-for dirname, dirnames, filenames in walk_results:
-    filenames = clean_folder(filenames)
-    print filenames
-print "-------"
-"""
-# print lol
-#print "------DIRECTORY CONTENTS------"
-#for dirname, dirnames, filenames in wr1, wr2, wr3:
-#    print "  ----------------------------"
-#    for subdirname in dirnames:
-#        print "  +" + subdirname
-#    for filename in filenames:
-#        print "  -" + filename
-#print "------------------------------"
-
-
 # build internal data for each file (from file system + id3 tags)
-print "3------"
-#walk_results = 
-#for dirname, dirnames, filenames in wr1, wr2, wr3:
 for dirname, subdirnames, filenames in os.walk(base_folder):
     song_list = []
     cleaned_filenames = clean_folder(filenames)
@@ -477,31 +495,15 @@ for dirname, subdirnames, filenames in os.walk(base_folder):
             read_id3_v1_tag(file_path)
             read_id3_v2_tag(file_path)
             #print "writing to " + file_path
-            #new_song.track_name = "lol dis is a song"
-            #new_song.track_number = 3
+            new_song.track_name = "lol dis is a song"
+            new_song.track_number = 3
             #write_id3_v1_tag(file_path, new_song, file_path+".mp3")
             write_id3_v2_tag(file_path, new_song, file_path+".mp3")
             print ""
-print "-------"
 
 # write the newly corrected data back to the tags
 
 # write new data to file system
 
-stringy = []
-stringy.append("the giant BOB.-of______joNES.mpz")
-stringy.append("THE.giant man.oF.the.month.avi")
-stringoo = []
-stringoo.append(clean_string(stringy[0]))
-stringoo.append(clean_string(stringy[1]))
-strings = remove_common_words(stringoo)
-print stringy[0]
-print stringy[1]
-print stringoo[0]
-print stringoo[1]
-print strings[0]
-print strings[1]
-
-#x = Song("boo")
 
 print "Finished."
