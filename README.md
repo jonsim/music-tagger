@@ -6,7 +6,7 @@ folder structures, file naming conventions and ID3 tags.
 
 In more detail, the program should explore a given directory and extract song information from the 
 folder structure (if it is artist/album/song.mp3), the file name and any applicable ID3 tags (either 
-v1 or v2 or both). The correct information (from these 3 potential sources) is then decided upon 
+v1 or v2 or both). The correct information (from these three potential sources) is then decided upon 
 before the folder structure is updated (to artist/album/song.mp3), the file renamed appropriately 
 (to "TRACKNUM Song Title.mp3") and is correctly tagged (with both an ID3v1.1 and an ID3v2.3.0 tag).
 
@@ -21,6 +21,7 @@ for testing purposes.
 TODO:
 - Add some type of voting procedure to decide on the correct album/artist/track name from the 
 available information (file path, ID3v1 tag, ID3v2 tag).
+- Add a method to create a new folder structure and rename files.
 
 
 EXTENSIONS:
