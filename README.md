@@ -15,6 +15,8 @@ repository, however for copyright reasons I have not committed them. Should you 
 project I would recommend that you replicate this setup by copying a few albums into the repository 
 for testing purposes.
 
+© Copyright 2013 Jonathan Simmonds
+
 
 License
 -------
