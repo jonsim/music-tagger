@@ -10,21 +10,25 @@ v1 or v2 or both). The correct information (from these three potential sources) 
 before the folder structure is updated (to artist/album/song.mp3), the file renamed appropriately 
 (to "TRACKNUM Song Title.mp3") and is correctly tagged (with both an ID3v1.1 and an ID3v2.3.0 tag).
 
-The project is released under the GPLv3 license.
-
 Note: I also have a small test directory structure containing a few sample music files in the 
 repository, however for copyright reasons I have not committed them. Should you want to work on the 
 project I would recommend that you replicate this setup by copying a few albums into the repository 
 for testing purposes.
 
 
-TODO:
+License
+-------
+The project is released under the GPLv3 license. It is created by Jonathan Simmonds.
+
+
+To Do
+-----
 - Add some type of voting procedure to decide on the correct album/artist/track name from the 
 available information (file path, ID3v1 tag, ID3v2 tag).
 - Add a method to create a new folder structure and rename files.
 
-
-EXTENSIONS:
+Extensions
+----------
 - It would be nice to be able to have the program produce several versions of the file at different 
 bit rates for different device usage (e.g. mobile devices would take 128-196 kbps, desktop devices 
 would take 320 kbps).
