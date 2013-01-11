@@ -29,6 +29,7 @@ To Do
 available information (file path, ID3v1 tag, ID3v2 tag).
 - Add a method to create a new folder structure and rename files.
 
+
 Extensions
 ----------
 - It would be nice to be able to have the program produce several versions of the file at different 
