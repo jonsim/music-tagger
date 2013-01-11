@@ -20,7 +20,7 @@ for testing purposes.
 
 License
 -------
-The project is released under the GPLv3 license. It is created by Jonathan Simmonds.
+The project is released under the GPLv3 license.
 
 
 To Do
