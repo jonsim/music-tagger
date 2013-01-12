@@ -31,7 +31,7 @@ song rating in the ID3 tag).
 Additionally changes will be made to the directory (as a dry-run by default) tree, renaming files to
 the form "TRACKNUM TITLE.mp3". The directory names are also updated to accommodate the new names 
 (e.g. fixing misspelled album/artist names). An option is available to create a new folder structure
-in the form "ARTIST/ALBUM/SONG.mp3", should one not already exist. Compilation CDs will be 
+in the form <code>ARTIST/ALBUM/SONG.mp3</code>, should one not already exist. Compilation CDs will be 
 identified and stored in "Various Artists/ALBUM/SONG.mp3" and will not be separated.
 
 &copy; Copyright 2013 Jonathan Simmonds
@@ -40,9 +40,9 @@ identified and stored in "Various Artists/ALBUM/SONG.mp3" and will not be separa
 License
 -------
 The project is released under the GPLv3 license.  
-This project also makes use of the [Levenshtein Python Extensions], released under the GPLv2 license.
+This project also makes use of the [Levenshtein Python Extension], released under the GPLv2 license.
 
-[Levenshtein Python Extensions]: http://code.google.com/p/pylevenshtein/ "Levenshtein Python Extensions at Google Code"
+[Levenshtein Python Extension]: http://code.google.com/p/pylevenshtein/ "Levenshtein Python Extensions at Google Code"
 
 
 To Do
