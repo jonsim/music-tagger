@@ -36,7 +36,7 @@ the form <code>TRACKNUM TITLE.mp3</code>. The directory names are also updated t
 in the form <code>ARTIST/ALBUM/SONG.mp3</code>, should one not already exist. Compilation CDs will be 
 identified and stored in <code>Various Artists/ALBUM/SONG.mp3</code> and will not be separated.
 
-&copy; Copyright 2013 Jonathan Simmonds
+&copy; Copyright 2013 Jonathan Simmonds.
 
 
 License
