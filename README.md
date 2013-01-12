@@ -31,7 +31,7 @@ song rating in the ID3 tag).
 Additionally changes will be made to the directory (as a dry-run by default) tree, renaming files to
 the form "TRACKNUM TITLE.mp3". The directory names are also updated to accommodate the new names 
 (e.g. fixing misspelled album/artist names). An option is available to create a new folder structure
-in the form <code>ARTIST/ALBUM/SONG.mp3</code>, should one not already exist. Compilation CDs will be 
+in the form <font face="Courier New">ARTIST/ALBUM/SONG.mp3</font>, should one not already exist. Compilation CDs will be 
 identified and stored in "Various Artists/ALBUM/SONG.mp3" and will not be separated.
 
 &copy; Copyright 2013 Jonathan Simmonds
