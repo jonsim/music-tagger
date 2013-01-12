@@ -12,11 +12,13 @@ IMPLEMENTED.**
 
 In more detail, the program recursively explores a given directory tree and, for each song it finds 
 extracts data about it from three different potential sources:
-1. The file path when it is of the form "ARTIST/ALBUM/SONG.mp3", where ALBUM can optionally include 
+
+1. The file path when it is of the form <code>ARTIST/ALBUM/SONG.mp3</code>, where ALBUM can optionally include 
    a year and SONG can optionally include a track number. All folder/file names are cleaned to fix 
    capitalisation issues and any symbols (e.g. for-example and FOR.EXAMPLE).
 2. The ID3v1 tag (accepting: v1.0 / v1.1 / extended versions of either).
 3. The ID3v2 tag (accepting: v2.2.x / v2.3.x / v2.4.x).
+
 This data is collected and then merged together based on string similarity (hopefully removing 
 errors such as the addition of " EP" to the end of album names and general typos). A voting 
 procedure is then undertaken between files from the same folder in order to standardise artist/album 
@@ -29,10 +31,10 @@ ID3v1.1 and ID3v2.3.0 tags to them (by far the most common and flexible). Old ta
 deleted in order to preserve player preferences and settings (e.g. some players store the user's 
 song rating in the ID3 tag).  
 Additionally changes will be made to the directory (as a dry-run by default) tree, renaming files to
-the form "TRACKNUM TITLE.mp3". The directory names are also updated to accommodate the new names 
+the form <code>TRACKNUM TITLE.mp3</code>. The directory names are also updated to accommodate the new names 
 (e.g. fixing misspelled album/artist names). An option is available to create a new folder structure
-in the form <font face="Courier New">ARTIST/ALBUM/SONG.mp3</font>, should one not already exist. Compilation CDs will be 
-identified and stored in "Various Artists/ALBUM/SONG.mp3" and will not be separated.
+in the form <code>ARTIST/ALBUM/SONG.mp3</code>, should one not already exist. Compilation CDs will be 
+identified and stored in <code>Various Artists/ALBUM/SONG.mp3</code> and will not be separated.
 
 &copy; Copyright 2013 Jonathan Simmonds
 
