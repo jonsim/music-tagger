@@ -40,9 +40,9 @@ identified and stored in "Various Artists/ALBUM/SONG.mp3" and will not be separa
 License
 -------
 The project is released under the GPLv3 license.  
-This project also makes use of the Levenshtein Python Extensions [1], released under the GPLv2 license.
+This project also makes use of the [Levenshtein Python Extensions], released under the GPLv2 license.
 
-[1]: http://code.google.com/p/pylevenshtein/    "Levenshtein Python Extensions at Google Code"
+[Levenshtein Python Extensions]: http://code.google.com/p/pylevenshtein/ "Levenshtein Python Extensions at Google Code"
 
 
 To Do
