@@ -41,6 +41,8 @@ import sys, string, os, re
 # To install, simply navigate to the python-Levenshtein-0.10.1 directory and run the command:
 # python setup.py install
 import Levenshtein
+# for multi-dimensional dictionaries
+from collections import defaultdict
 
 
 
@@ -48,19 +50,6 @@ import Levenshtein
 #-----------------------------------------------------------------------#
 #------------------------    CLASS DEFINITIONS    ----------------------#
 #-----------------------------------------------------------------------#
-class Artist:
-    artist_name = ""
-    albums = {}
-
-class Album:
-    album_name = ""
-    album_year = 0
-    songs = {}
-
-class Song:
-    track_name   = ""
-    track_number = 0
-
 class MusicFile:
     # File path, the only required and certain piece of data.
     file_path = ""
@@ -246,7 +235,10 @@ class MusicFile:
                     self.v1_title  += strip_null_bytes(tagx_data[  4: 64])
                     self.v1_artist += strip_null_bytes(tagx_data[ 64:124])
                     self.v1_album  += strip_null_bytes(tagx_data[124:184])
-                #self.v1_data_loaded = True
+                # clean the strings generated
+                self.v1_title  = clean_string(self.v1_title)
+                self.v1_artist = clean_string(self.v1_artist)
+                self.v1_album  = clean_string(self.v1_album)
             else:
                 print "No ID3v1 tag found."
                 #self.v1_data_loaded = False
@@ -290,27 +282,64 @@ class MusicFile:
                     #print "  Frame ID: %s, size %d bytes" % (frame_id, frame_size)
                     total_read_size += 10 + frame_size
                     # Collect frame info
-                    if frame_id == "TALB":
-                        self.v2_album = f.read(frame_size)[1:]
+                    if   frame_id == "TALB":
+                        self.v2_album  = f.read(frame_size)[1:]
                     elif frame_id == "TIT2":
-                        self.v2_title = f.read(frame_size)[1:]
+                        self.v2_title  = f.read(frame_size)[1:]
                     elif frame_id == "TPE1":
                         self.v2_artist = f.read(frame_size)[1:]
                     elif frame_id == "TRCK":
-                        self.v2_track = int(f.read(frame_size)[1:].split('/')[0])
+                        self.v2_track  = int(f.read(frame_size)[1:].split('/')[0])
                     elif frame_id == "TYER":
-                        self.v2_year = int(f.read(frame_size)[1:])
-#                print "%s tag found: '%s' - '%s' by '%s' in %d, track %d" % (version_string, self.v2_title, self.v2_album, self.v2_artist, self.v2_year, self.v2_track)
-                #self.v2_data_loaded = True
+                        self.v2_year   = int(f.read(frame_size)[1:])
+                # clean the strings generated
+                self.v2_title  = clean_string(self.v2_title)
+                self.v2_artist = clean_string(self.v2_artist)
+                self.v2_album  = clean_string(self.v2_album)
             else:
                 print "No ID3v2 tag found."
                 #self.v2_data_loaded = False
 
 
+class MusicCollection:
+    def __init__ (self):
+        # Recursive function to create a multidimensional dictionary using defaultdict
+        def create_multidimensional_dictionary (n, type):
+            if n < 1:
+                return type()
+            return defaultdict(lambda:create_multidimensional_dictionary(n-1, type))
+        # Create one
+        self.albums = create_multidimensional_dictionary(2, list)
+    
+    
+    def __str__ (self):
+        s = "---- Album Dictionary Mappings ----\n"
+        level_1_keys = self.albums.keys()
+        for k1 in level_1_keys:
+            level_2_keys = self.albums[k1].keys()
+            for k2 in level_2_keys:
+                s += "[%s][%s]\n" % (k1, k2)
+                songs = self.albums[k1][k2]
+                for song in songs:
+                    s += "    %d %s\n" % (song.final_track, song.final_title)
+        s += "-----------------------------------"
+        return s
+
+
+    # Creates a song from the MusicFile given and adds it to the song database. All the data from the 
+    # MusicFile is compressed at this point.
+    def add (self, music_file):
+        if not music_file.final_data_set:
+            raise Exception("create_song called with a non-finalised music file.")
+        if not self.albums[music_file.final_artist][music_file.final_album]:
+            self.albums[music_file.final_artist][music_file.final_album] = []
+        self.albums[music_file.final_artist][music_file.final_album].append(music_file)
+
+
 
 
 #-----------------------------------------------------------------------#
-#----------------------    FUNCTION DEFINITIONS    ---------------------#
+#-----------------    MUSICFILE SPECIFIC FUNCTIONS    ------------------#
 #-----------------------------------------------------------------------#
 # Takes a list of MusicFiles are expected to all come from the same album (and by extension artist) 
 # and performs a vote between them to generate the correct album/artist information (if a majority 
@@ -321,12 +350,12 @@ def vote_on_album_between_music_files (music_file_list):
     #for music_file in music_file_list:
     return
 
-# Creates a song from the MusicFile given and adds it to the song database. All the data from the 
-# MusicFile is compressed at this point.
-def create_song (music_file):
-    global artists
-    
 
+
+
+#-----------------------------------------------------------------------#
+#--------------------    FILE HANDLING FUNCTIONS    --------------------#
+#-----------------------------------------------------------------------#
 # Strips extraneous whitespace and null bytes from some given data, leaving a string.
 def strip_null_bytes (data):
     return data.replace("\00", "").strip()
@@ -386,31 +415,27 @@ def write_id3_v1_tag (input_file_path, output_song_data, output_file_path=""):
         f.write(track_data)
 
 
-
-
-
-# Constructs an id3v2 text content frame using the frame_id given and the frame content (a string)
-def write_id3_v2_frame (frame_id, frame_content):
-    size = len(frame_content) + 2       # encoding mark + content + null termination
-    size_b1 = (size >> 24) % 256
-    size_b2 = (size >> 16) % 256
-    size_b3 = (size >>  8) % 256
-    size_b4 = size         % 256
-    size_string = chr(size_b1) + chr(size_b2) + chr(size_b3) + chr(size_b4)
-    flag_string = chr(0) + chr(0)
-    frame = frame_id
-    frame += size_string
-    frame += flag_string
-    frame += '\00'      # encoding mark (ISO-8859-1)
-    frame += frame_content
-    frame += '\00'
-    return frame
-
-
 # Writes the ID3v2.x tag to a file (overwriting if present, inserting if not).
 def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
-    global write_mode
+    # Constructs an id3v2 text content frame using the frame_id given and the frame content (a string)
+    def write_id3_v2_frame (frame_id, frame_content):
+        size = len(frame_content) + 2       # encoding mark + content + null termination
+        size_b1 = (size >> 24) % 256
+        size_b2 = (size >> 16) % 256
+        size_b3 = (size >>  8) % 256
+        size_b4 = size         % 256
+        size_string = chr(size_b1) + chr(size_b2) + chr(size_b3) + chr(size_b4)
+        flag_string = chr(0) + chr(0)
+        frame = frame_id
+        frame += size_string
+        frame += flag_string
+        frame += '\00'      # encoding mark (ISO-8859-1)
+        frame += frame_content
+        frame += '\00'
+        return frame
+
     
+    global write_mode
     # if no output_file_path is given set it to the input_file_path (i.e. rewrite the input's tag).
     if output_file_path == "":
         output_file_path = input_file_path
@@ -489,6 +514,11 @@ def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
         f.write(track_data)
 
 
+
+
+#-----------------------------------------------------------------------#
+#-------------------    STRING HANDLING FUNCTIONS    -------------------#
+#-----------------------------------------------------------------------#
 # for all words in the list, replace all but the last '.', all '_' and '-' with spaces, then remove 
 # duplicate spaces before finally fixing the capitalisation.
 def clean_string (s):
@@ -607,11 +637,19 @@ if len(sys.argv) > 1:
             force_directory_mode = True
 # Check for a valid input. This doesn't check the base_folder's sanity.
 if base_folder == "":
-    print "Error: The program must be run on a folder, with the form:\n./music_tagger FOLDER [options]\n  -f - write changes.\n  -d - force the directory structure to be the ground truth, using its structure (artist/album/song.mp3) for the tag.\n  -v - verbose mode.\nSystem exiting."
+    print "Error: The program must be run on a folder, with the form:"
+    print "./music_tagger FOLDER [options]"
+    print "  -f - write changes."
+    print "  -d - force the directory structure to be the ground truth, using its structure (artist/album/song.mp3) for the tag."
+    print "  -v - verbose mode."
+    print "System exiting."
     sys.exit()
 if force_directory_mode == False:
     print "Error: Force directory mode (-d) is not enabled (i.e. you are telling the program you have a mismatched folder structure), however the functionality to deal with this scenario has not yet been implemented. Sorry!"
     sys.exit()
+
+# create storage system
+music_collection = MusicCollection()
 
 # Traverse all folders (dirname gives the path to the current directory, dirnames gives the list of
 # subdirectories in the folder, filenames gives the list of files in the folder). When mp3s are 
@@ -621,25 +659,14 @@ for dirname, subdirnames, filenames in os.walk(base_folder):
     cleaned_filenames = clean_folder(filenames)
     for i in range(len(filenames)):
         if filenames[i][-4:] == ".mp3":
-            # BOYZ WE FOUND OURSELF A SONG. Lets index him.
+            # BOYZ WE FOUND OURSELF A SONG. Lets extract all the information possible from it and
+            # add it to our database.
             file_path = os.path.join(dirname, filenames[i])
             new_file = MusicFile(file_path, cleaned_filenames[i])
             new_file.load_all_data()
-            print new_file
             new_file.compress_all_data()
-            print new_file
-            #music_list.append(new_file)
-            #new_song = MusicFile(file_path, cleaned_filenames[i])
-            #song_list.append(new_song)
-            #print "Created: " + str(new_song)
-            #read_id3_v1_tag(file_path)
-            #read_id3_v2_tag(file_path)
-            #print "writing to " + file_path
-            #new_song.track_name = "lol dis is a song"
-            #new_song.track_number = 3
-            #write_id3_v1_tag(file_path, new_song, file_path+".mp3")
-            #write_id3_v2_tag(file_path, new_song, file_path+".mp3")
-            print ""
+            music_collection.add(new_file)
+print music_collection
 
 # write the newly corrected data back to the tags
 
