@@ -35,14 +35,13 @@
 #----------------------------    IMPORTS    ----------------------------#
 #-----------------------------------------------------------------------#
 import sys, string, os, re
+from collections import defaultdict
 # This project makes use of the Levenshtein Python extension for the string comparisons (edit 
 # distance and the like). A copy of it is provided with this project, and the most recent version 
 # or more up to date information can be found at the project page: http://code.google.com/p/pylevenshtein/
 # To install, simply navigate to the python-Levenshtein-0.10.1 directory and run the command:
 # python setup.py install
 import Levenshtein
-# for multi-dimensional dictionaries
-from collections import defaultdict
 
 
 
@@ -57,6 +56,7 @@ class MusicFile:
     #v1_data_loaded = False
     #v2_data_loaded = False
     final_data_set = False
+    marked_for_removal = False
     # Data extracted from the file path.
     fp_title  = ""
     fp_album  = ""
@@ -87,10 +87,10 @@ class MusicFile:
     
     
     # Note that not giving it a cleaned filename will cause one to be generated automatically for
-    # you. The downside of this is that it will be treated in isolation to all other files in the 
-    # directory so it cannot perform common word removal or anything clever.
+    # you. The downside of this is that when automatic cleaning of the filename occurs it is treated
+    # in isolation to all other files in the directory (as it does not have access to them) so it 
+    # cannot perform common word removal or anything clever.
     def __init__ (self, file_path, cleaned_filename=""):
-#        print "Creating a MusicFile (%s)." % file_path
         if file_path == "":
             raise Exception("Cannot create a MusicFile with an empty file_path.")
         self.file_path = file_path
@@ -100,6 +100,7 @@ class MusicFile:
             self.cleaned_filename = cleaned_filename
     
     
+    # Printing function. Different data is printed out depending on the object's state.
     def __str__ (self):
         if self.final_data_set:
             s = "MusicFile compressed data:\n"
@@ -112,7 +113,13 @@ class MusicFile:
         return s
     
     
-    # Compresses the data from all the loaded sources together into the final data set.
+    # 'Compresses' the data from all the loaded sources together into the final data set. This is 
+    # NOT compression in the traditional sense of e.g. gzip, but in the more general sense of 
+    # combining lots of data together to form a smaller amount of data. This does not delete any of 
+    # the old data (so no less space is taken up), however the final_data_set flag is set which will
+    # cause other functions to read only this final data from the object. This flag being set (and 
+    # thus final data having been generated) is a requirement for many functions which will act on 
+    # the MusicFile.
     def compress_all_data (self):
         def compress_string_data (fp=None, v1=None, v2=None):
             # We tend to favour fp while v1 and v2 have equal weighting. We assume v1 could have
@@ -302,6 +309,7 @@ class MusicFile:
 
 
 class MusicCollection:
+    # Sets up the data structure.
     def __init__ (self):
         # Recursive function to create a multidimensional dictionary using defaultdict
         def create_multidimensional_dictionary (n, type):
@@ -312,43 +320,75 @@ class MusicCollection:
         self.albums = create_multidimensional_dictionary(2, list)
     
     
+    # Print method.
     def __str__ (self):
         s = "---- Album Dictionary Mappings ----\n"
-        level_1_keys = self.albums.keys()
-        for k1 in level_1_keys:
-            level_2_keys = self.albums[k1].keys()
-            for k2 in level_2_keys:
+        for k1 in self.albums.keys():
+            for k2 in self.albums[k1].keys():
                 s += "[%s][%s]\n" % (k1, k2)
-                songs = self.albums[k1][k2]
-                for song in songs:
+                for song in self.albums[k1][k2]:
                     s += "    %d %s\n" % (song.final_track, song.final_title)
         s += "-----------------------------------"
         return s
 
 
-    # Creates a song from the MusicFile given and adds it to the song database. All the data from the 
-    # MusicFile is compressed at this point.
+    # Creates a song from the MusicFile given and adds it to the song database. The MusicFile must
+    # be compressed at this point so that the final data is available (for indexing purposes).
+    # TODO Compilations are going to wreak havoc here too, see note on remove_duplicates.
     def add (self, music_file):
         if not music_file.final_data_set:
             raise Exception("create_song called with a non-finalised music file.")
         if not self.albums[music_file.final_artist][music_file.final_album]:
             self.albums[music_file.final_artist][music_file.final_album] = []
         self.albums[music_file.final_artist][music_file.final_album].append(music_file)
-
-
-
-
-#-----------------------------------------------------------------------#
-#-----------------    MUSICFILE SPECIFIC FUNCTIONS    ------------------#
-#-----------------------------------------------------------------------#
-# Takes a list of MusicFiles are expected to all come from the same album (and by extension artist) 
-# and performs a vote between them to generate the correct album/artist information (if a majority 
-# decision can be reached at all, if not it is assumed that these files do not in fact originate 
-# from the same album).
-def vote_on_album_between_music_files (music_file_list):
-    # load the list of album names
-    #for music_file in music_file_list:
-    return
+    
+    
+    # Look for duplicate songs and remove them. Duplicate artists and albums are not a problem - you
+    # need a music file (itself a song) to contain the data to have generated them, so you either
+    # have duplicate songs, or different songs with slightly different artist/album names. This 
+    # should be corrected by the MusicFile's compression step. If it wasn't properly picked up then 
+    # (i.e. the names were too dissimilar) We have no further information at this point so we can't
+    # fix it.
+    # TODO Compilations are going to go crazy here... revist this later, probably with a MusicFile 
+    #      flag for (probable) compilation tracks.
+    def remove_duplicates (self):
+        duplicate_tracker = {}
+        for k1 in self.albums.keys():
+            for k2 in self.albums[k1].keys():
+                for song in self.albums[k1][k2]:
+                    k3 = song.final_title
+                    if k3 in duplicate_tracker:
+                        if duplicate_tracker[k3].final_track == song.final_track and duplicate_tracker[k3].final_year == song.final_year:
+                            print "Duplicate files found and removed (%s - %s by %s)" % (song.final_title, song.final_album, song.final_artist)
+                            song.marked_for_removal = True
+                        else:
+                            print "WARNING: Songs with duplicate artist, album and title found but differing track (%d vs %d) and year (%d vs %d) data. Keeping the first." % (duplicate_tracker[k3].final_track, song.final_track, duplicate_tracker[k3].final_year, song.final_year)
+                            song.marked_for_removal = True
+                    else:
+                        duplicate_tracker[k3] = song
+    
+    
+    # Takes a vote between tracks within albums to standardise information on the album year and
+    # track numbering.
+    # TODO Compilations are going to wreak havoc here too, see note on remove_duplicates.
+    def standardise_album_tracks (self):
+        # Pass through all the songs
+        for k1 in self.albums.keys():
+            for k2 in self.albums[k1].keys():
+                # First collect the number of times each different album year data appears. Ideally 
+                # all tracks should have the same year.
+                album_year_votes = {}
+                for song in self.albums[k1][k2]:
+                    if song.final_year in album_year_votes:
+                        album_year_votes[song.final_year] += 1
+                    else:
+                        album_year_votes[song.final_year] =  1
+                # If there is more than one album year listed, standardise. A good argument could be
+                # made for any number of strategies for standardising. Currently the majority vote
+                # takes it, but the latest 'sensible' year would also be an idea.
+                if len(album_year_votes.keys()) > 1:
+                    print "multiple album year votes found:"
+                    print album_year_votes
 
 
 
@@ -667,6 +707,8 @@ for dirname, subdirnames, filenames in os.walk(base_folder):
             new_file.compress_all_data()
             music_collection.add(new_file)
 print music_collection
+music_collection.remove_duplicates()
+music_collection.standardise_album_tracks()
 
 # write the newly corrected data back to the tags
 
