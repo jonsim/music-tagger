@@ -34,7 +34,7 @@
 #-----------------------------------------------------------------------#
 #----------------------------    IMPORTS    ----------------------------#
 #-----------------------------------------------------------------------#
-import sys, string, os, re
+import sys, string, os, re, operator
 from collections import defaultdict
 # This project makes use of the Levenshtein Python extension for the string comparisons (edit 
 # distance and the like). A copy of it is provided with this project, and the most recent version 
@@ -99,13 +99,13 @@ class MusicFile:
     # Printing function. Different data is printed out depending on the object's state.
     def __str__ (self):
         if self.final_data_set:
-            s = "MusicFile compressed data:\n"
-            s += "  %d %s - %s by %s on %d" % (self.final_track, self.final_title, self.final_album, self.final_artist, self.final_year)
+            #s = "MusicFile compressed data:\n"
+            s = "%02d %s - %s by %s in %d" % (self.final_track, self.final_title, self.final_album, self.final_artist, self.final_year)
         else:
             s = "MusicFile uncompressed data:\n"
-            s += "  fp) %d %s - %s by %s on %d\n" % (self.fp_track, self.fp_title, self.fp_album, self.fp_artist, self.fp_year)
-            s += "  v1) %d %s - %s by %s on %d\n" % (self.v1_track, self.v1_title, self.v1_album, self.v1_artist, self.v1_year)
-            s += "  v2) %d %s - %s by %s on %d"   % (self.v2_track, self.v2_title, self.v2_album, self.v2_artist, self.v2_year)
+            s += "  fp) %02d %s - %s by %s in %d\n" % (self.fp_track, self.fp_title, self.fp_album, self.fp_artist, self.fp_year)
+            s += "  v1) %02d %s - %s by %s in %d\n" % (self.v1_track, self.v1_title, self.v1_album, self.v1_artist, self.v1_year)
+            s += "  v2) %02d %s - %s by %s in %d"   % (self.v2_track, self.v2_title, self.v2_album, self.v2_artist, self.v2_year)
         return s
     
     
@@ -162,7 +162,7 @@ class MusicFile:
                 return v1
             # As all integer data is non-essential don't bother even mentioning it.
             else:
-                print "Warning: compress_integer_data called with no arguments."
+                #print "WARNING: compress_integer_data called with no arguments."
                 return 0
         
         self.final_title  = compress_string_data( self.fp_title,  self.v1_title,  self.v2_title)
@@ -242,8 +242,6 @@ class MusicFile:
                 self.v1_title  = clean_string(self.v1_title,  True)
                 self.v1_artist = clean_string(self.v1_artist, True)
                 self.v1_album  = clean_string(self.v1_album,  True)
-            else:
-                print "No ID3v1 tag found."
     
     
     # Reads the ID3v2 tag data from a file (if present).
@@ -255,7 +253,7 @@ class MusicFile:
             if header_data[:3] == "ID3":
                 # check its not messed up
                 if ord(header_data[3]) == 0xFF or ord(header_data[4]) == 0xFF or ord(header_data[6]) >= 0x80 or ord(header_data[7]) >= 0x80 or ord(header_data[8]) >= 0x80 or ord(header_data[9]) >= 0x80:
-                    print "corrupted tag found, exitting."
+                    print "WARNING: corrupted tag found, cancelling load."
                     return
                 # Collect the tag header info. The tag_size is the complete ID3v2 tag size, minus the 
                 # header (but not the extended header if one exists). Thus tag_size = total_tag_size - 10.
@@ -298,8 +296,6 @@ class MusicFile:
                 self.v2_title  = clean_string(self.v2_title,  True)
                 self.v2_artist = clean_string(self.v2_artist, True)
                 self.v2_album  = clean_string(self.v2_album,  True)
-            else:
-                print "No ID3v2 tag found."
 
 
 class MusicCollection:
@@ -323,7 +319,7 @@ class MusicCollection:
             for k2 in self.albums[k1].keys():
                 s += "[%s][%s]\n" % (k1, k2)
                 for song in self.albums[k1][k2]:
-                    s += "    %d %s\n" % (song.final_track, song.final_title)
+                    s += "    %02d %s\n" % (song.final_track, song.final_title)
         s += "-----------------------------------"
         return s
 
@@ -349,15 +345,18 @@ class MusicCollection:
     # TODO Compilations are going to go crazy here... revist this later, probably with a MusicFile 
     #      flag for (probable) compilation tracks.
     def remove_duplicates (self):
-        duplicate_tracker = {}
         for k1 in self.albums.keys():
             for k2 in self.albums[k1].keys():
+                duplicate_tracker = {}
                 to_be_removed = []
                 for song in self.albums[k1][k2]:
                     k3 = song.final_title
                     if k3 in duplicate_tracker:
                         if duplicate_tracker[k3].final_track != song.final_track or duplicate_tracker[k3].final_year != song.final_year:
-                            print "WARNING: Songs with duplicate artist, album and title found but differing track (%d vs %d) and/or year (%d vs %d) data. Keeping the first." % (duplicate_tracker[k3].final_track, song.final_track, duplicate_tracker[k3].final_year, song.final_year)
+                            #print "WARNING: Songs with duplicate artist, album and title found (at %s and %s) but differing track (%d vs %d) and/or year (%d vs %d) data. Keeping the first." % (duplicate_tracker[k3].file_path, song.file_path, duplicate_tracker[k3].final_track, song.final_track, duplicate_tracker[k3].final_year, song.final_year)
+                            print "WARNING: Songs with duplicate information found:"
+                            print "  %s:%s" % ('{:<80}'.format(duplicate_tracker[k3].file_path), duplicate_tracker[k3])
+                            print "  %s:%s" % ('{:<80}'.format(song.file_path),                  song)
                         to_be_removed.append(song)
                     else:
                         duplicate_tracker[k3] = song
@@ -383,9 +382,14 @@ class MusicCollection:
                 # made for any number of strategies for standardising. Currently the majority vote
                 # takes it, but the latest 'sensible' year would also be an idea.
                 if len(album_year_votes.keys()) > 1:
-                    print "multiple album year votes found:"
-                    print album_year_votes
-                    raise Exception("oh no")
+                    sorted_album_year_votes = sorted(album_year_votes.iteritems(), key=operator.itemgetter(1), reverse=True)
+                    if sorted_album_year_votes[0][0] != 0:
+                        correct_year = sorted_album_year_votes[0][0]
+                    else:
+                        correct_year = sorted_album_year_votes[1][0]
+                    print "WARNING: multiple album year votes found for %s by %s: %s. Using %d." % (k2, k1, str(sorted_album_year_votes), correct_year )
+                    for song in self.albums[k1][k2]:
+                        song.final_year = correct_year
     
     
     # Small method to sort the songs in the lists by their track numbers.
@@ -423,7 +427,7 @@ def mint (s):
     try:
         r = int(s)
     except ValueError:
-        print "WARNING: '%s' attempted conversion to integer. Returning 0" % (s)
+        #print "WARNING: '%s' attempted conversion to integer. Returning 0" % (s)
         r = 0
         pass
     return r
@@ -784,13 +788,14 @@ music_collection.remove_duplicates()
 music_collection.standardise_album_tracks()
 #report_progress("Processing indexed files", 100)
 
-music_collection.sort_songs_by_track()
-print music_collection
+if verbose_mode:
+    music_collection.sort_songs_by_track()
+    print music_collection
 
 # write the newly corrected data to a new file system with new tags
-new_folder = generate_new_filepath(base_folder)
-print "Creating new directory structure in %s." % (new_folder)
-music_collection.create_new_filesystem(new_folder)
+#new_folder = generate_new_filepath(base_folder)
+#print "Creating new directory structure in %s." % (new_folder)
+#music_collection.create_new_filesystem(new_folder)
 
 # done
 print "Finished."
