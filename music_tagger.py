@@ -52,11 +52,7 @@ import Levenshtein
 class MusicFile:
     # File path, the only required and certain piece of data.
     file_path = ""
-    #fp_data_loaded = False
-    #v1_data_loaded = False
-    #v2_data_loaded = False
     final_data_set = False
-    marked_for_removal = False
     # Data extracted from the file path.
     fp_title  = ""
     fp_album  = ""
@@ -95,7 +91,7 @@ class MusicFile:
             raise Exception("Cannot create a MusicFile with an empty file_path.")
         self.file_path = file_path
         if cleaned_filename == "":
-            self.cleaned_filename = clean_string(file_path.split('/')[-1])
+            self.cleaned_filename = clean_string(file_path.split('/')[-1], True)
         else:
             self.cleaned_filename = cleaned_filename
     
@@ -208,7 +204,6 @@ class MusicFile:
             self.fp_title = ' '.join(filename_split[1:]).split('.')[0]
         else:
             self.fp_title = ' '.join(filename_split).split('.')[0]
-        #self.fp_data_loaded = True
     
     
     # Reads the ID3v1 tag data from a file (if present). ID3 v1.0 and v1.1 tags are supported along with extended tags.
@@ -243,12 +238,11 @@ class MusicFile:
                     self.v1_artist += strip_null_bytes(tagx_data[ 64:124])
                     self.v1_album  += strip_null_bytes(tagx_data[124:184])
                 # clean the strings generated
-                self.v1_title  = clean_string(self.v1_title)
-                self.v1_artist = clean_string(self.v1_artist)
-                self.v1_album  = clean_string(self.v1_album)
+                self.v1_title  = clean_string(self.v1_title,  True)
+                self.v1_artist = clean_string(self.v1_artist, True)
+                self.v1_album  = clean_string(self.v1_album,  True)
             else:
                 print "No ID3v1 tag found."
-                #self.v1_data_loaded = False
     
     
     # Reads the ID3v2 tag data from a file (if present).
@@ -300,15 +294,16 @@ class MusicFile:
                     elif frame_id == "TYER":
                         self.v2_year   = int(f.read(frame_size)[1:])
                 # clean the strings generated
-                self.v2_title  = clean_string(self.v2_title)
-                self.v2_artist = clean_string(self.v2_artist)
-                self.v2_album  = clean_string(self.v2_album)
+                self.v2_title  = clean_string(self.v2_title,  True)
+                self.v2_artist = clean_string(self.v2_artist, True)
+                self.v2_album  = clean_string(self.v2_album,  True)
             else:
                 print "No ID3v2 tag found."
-                #self.v2_data_loaded = False
 
 
 class MusicCollection:
+    file_count = 0
+    
     # Sets up the data structure.
     def __init__ (self):
         # Recursive function to create a multidimensional dictionary using defaultdict
@@ -332,8 +327,8 @@ class MusicCollection:
         return s
 
 
-    # Creates a song from the MusicFile given and adds it to the song database. The MusicFile must
-    # be compressed at this point so that the final data is available (for indexing purposes).
+    # Adds the MusicFile to the dictionary. The MusicFile must be compressed at this point so that 
+    # the final data is available (for indexing purposes).
     # TODO Compilations are going to wreak havoc here too, see note on remove_duplicates.
     def add (self, music_file):
         if not music_file.final_data_set:
@@ -341,6 +336,7 @@ class MusicCollection:
         if not self.albums[music_file.final_artist][music_file.final_album]:
             self.albums[music_file.final_artist][music_file.final_album] = []
         self.albums[music_file.final_artist][music_file.final_album].append(music_file)
+        self.file_count += 1
     
     
     # Look for duplicate songs and remove them. Duplicate artists and albums are not a problem - you
@@ -355,17 +351,16 @@ class MusicCollection:
         duplicate_tracker = {}
         for k1 in self.albums.keys():
             for k2 in self.albums[k1].keys():
+                to_be_removed = []
                 for song in self.albums[k1][k2]:
                     k3 = song.final_title
                     if k3 in duplicate_tracker:
-                        if duplicate_tracker[k3].final_track == song.final_track and duplicate_tracker[k3].final_year == song.final_year:
-                            print "Duplicate files found and removed (%s - %s by %s)" % (song.final_title, song.final_album, song.final_artist)
-                            song.marked_for_removal = True
-                        else:
+                        if duplicate_tracker[k3].final_track != song.final_track or duplicate_tracker[k3].final_year != song.final_year:
                             print "WARNING: Songs with duplicate artist, album and title found but differing track (%d vs %d) and year (%d vs %d) data. Keeping the first." % (duplicate_tracker[k3].final_track, song.final_track, duplicate_tracker[k3].final_year, song.final_year)
-                            song.marked_for_removal = True
+                        to_be_removed.append(song)
                     else:
                         duplicate_tracker[k3] = song
+                [self.albums[k1][k2].remove(song) for song in to_be_removed]
     
     
     # Takes a vote between tracks within albums to standardise information on the album year and
@@ -392,8 +387,28 @@ class MusicCollection:
                     raise Exception("oh no")
     
     
+    # Small method to sort the songs in the lists by their track numbers.
+    def sort_songs_by_track (self):
+        for k1 in self.albums.keys():
+            for k2 in self.albums[k1].keys():
+                self.albums[k1][k2].sort(key=lambda x: x.final_track)
+        
+    
+    
     def create_new_filesystem (self, new_path):
         os.mkdir(new_path)
+        for artist_name in self.albums.keys():
+            artist_subpath = '/%s' % (artist_name)
+            os.mkdir(new_path + artist_subpath)
+            for album_name in self.albums[artist_name].keys():
+                if self.albums[artist_name][album_name][0].final_year != 0:
+                    album_subpath = '/[%d] %s' % (self.albums[artist_name][album_name][0].final_year, album_name)
+                else:
+                    album_subpath = '/%s' % (album_name)
+                os.mkdir(new_path + artist_subpath + album_subpath)
+                for song in self.albums[artist_name][album_name]:
+                    song_subpath = '/%02d %s.mp3' % (song.final_track, song.final_title)
+                    create_new_file(song, new_path + artist_subpath + album_subpath + song_subpath)
 
 
 
@@ -416,52 +431,66 @@ def pack_null_bytes (string, length):
     return data
 
 
-# Writes the ID3v1.1 tag to a file (overwriting if present, appending if not).
-def write_id3_v1_tag (input_file_path, output_song_data, output_file_path=""):
+def create_new_file (music_file, output_file_path):
     global write_mode
-    
-    # if no output_file_path is given set it to the input_file_path (i.e. rewrite the input's tag).
-    if output_file_path == "":
-        output_file_path = input_file_path
-    if output_file_path == input_file_path and not write_mode:
+    if music_file.file_path == output_file_path and not write_mode:
         raise Exception("write_id3_v1_tag called and instructed to write over the file, however write mode (-f) is not enabled.")
     
+    track_data = extract_track_data(music_file.file_path)
+    id3v1_tag  = create_id3v1_tag(music_file)
+    id3v2_tag  = create_id3v2_tag(music_file)
+    with open(output_file_path, "wb") as f:
+        f.write(id3v2_tag + track_data + id3v1_tag)
+
+
+def extract_track_data (file_path):
     # read the entire input file in.
-    with open(input_file_path, "rb") as f:
+    with open(file_path, "rb") as f:
         track_data = f.read()
     
-    # check what existing id3v1 tag we have (if any), and if so purge it.
+    # check if we have an id3v2 tag and strip it from the track data.
+    if track_data[:3] == "ID3":
+        # check its not messed up
+        if ord(track_data[3]) == 0xFF or ord(track_data[4]) == 0xFF or ord(track_data[6]) >= 0x80 or ord(track_data[7]) >= 0x80 or ord(track_data[8]) >= 0x80 or ord(track_data[9]) >= 0x80:
+            raise Exception("write_id3_v2_tag called on a file with a corrupted id3v2 tag. Exitting.")
+        # Collect the tag header info. The tag_size is the complete ID3v2 tag size, minus the 
+        # header (but not the extended header if one exists). Thus tag_size = total_tag_size - 10.
+        tag_size = (ord(track_data[6]) << 21) + (ord(track_data[7]) << 14) + (ord(track_data[8]) << 7) + (ord(track_data[9]))
+        track_data = track_data[tag_size+10:]
+    
+    # check if we have an id3v1 tag and strip it from the track data.
     if track_data[-128:-125] == "TAG":                      # check for v1.0/v1.1
         if track_data[-(128+227):-(128+227-4)] == "TAG+":   # check for v1.0 extended
             track_data = track_data[:-(128+227)]
         else:
             track_data = track_data[:-128]
     
-    # create our new id3v1.1 tag and add it to the track data.
-    genre = 255
-    if output_song_data.album_year == 0:
+    # return what's left
+    return track_data
+
+
+# Writes the ID3v1.1 tag to a file (overwriting if present, appending if not). Passing write_mode in
+# as a variable is less than ideal, but it's the easiest way to allow overwriting of newly created
+# files.
+def create_id3v1_tag (music_file):
+    genre = music_file.v1_genre
+    if music_file.final_year == 0:
         year_string = '\00' * 4
     else:
-        year_string = str(output_song_data.album_year)
+        year_string = str(music_file.final_year)
     # 3 B header, 30 B title, artist, album, 4 B year string, 28 B comment, zero-byte (signifying v1.1), 1 B track, 1 B genre
-    new_tag = "TAG" + pack_null_bytes(output_song_data.track_name,  30) \
-                    + pack_null_bytes(output_song_data.artist_name, 30) \
-                    + pack_null_bytes(output_song_data.album_name,  30) \
-                    + year_string                                       \
-                    + '\00' * 28                                        \
-                    + '\00'                                             \
-                    + chr(output_song_data.track_number)                \
-                    + chr(genre)                                        
-    print "created new tag, size " + str(len(new_tag)) + " bytes"
-    
-    # write the result to the output file.
-    track_data += new_tag
-    with open(output_file_path, "wb") as f:
-        f.write(track_data)
+    new_tag = "TAG" + pack_null_bytes(music_file.final_title,  30) \
+                    + pack_null_bytes(music_file.final_artist, 30) \
+                    + pack_null_bytes(music_file.final_album,  30) \
+                    + year_string                                  \
+                    + '\00' * 28                                   \
+                    + '\00'                                        \
+                    + chr(music_file.final_track)                  \
+                    + chr(genre)
+    return new_tag
 
 
-# Writes the ID3v2.x tag to a file (overwriting if present, inserting if not).
-def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
+def create_id3v2_tag (music_file):
     # Constructs an id3v2 text content frame using the frame_id given and the frame content (a string)
     def write_id3_v2_frame (frame_id, frame_content):
         size = len(frame_content) + 2       # encoding mark + content + null termination
@@ -479,16 +508,8 @@ def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
         frame += '\00'
         return frame
 
-    
-    global write_mode
-    # if no output_file_path is given set it to the input_file_path (i.e. rewrite the input's tag).
-    if output_file_path == "":
-        output_file_path = input_file_path
-    if output_file_path == input_file_path and not write_mode:
-        raise Exception("write_id3_v2_tag called and instructed to write over the file, however write mode (-f) is not enabled.")
-    
     # read the entire input file in.
-    with open(input_file_path, "rb") as f:
+    with open(music_file.file_path, "rb") as f:
         track_data = f.read()
     
     # check what existing id3v2 tag we have (if any). if we have one, separate the track from it.
@@ -502,17 +523,16 @@ def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
         # header (but not the extended header if one exists). Thus tag_size = total_tag_size - 10.
         tag_size = (ord(track_data[6]) << 21) + (ord(track_data[7]) << 14) + (ord(track_data[8]) << 7) + (ord(track_data[9]))
         tag_data   = track_data[:tag_size+10]
-        track_data = track_data[tag_size+10:]
     
     # create a new tag and add our data to it
     # write the frames to it (we do this before we write the header so we can calculate the size)
-    new_frames =  write_id3_v2_frame("TIT2", output_song_data.track_name)
-    new_frames += write_id3_v2_frame("TALB", output_song_data.album_name)
-    new_frames += write_id3_v2_frame("TPE1", output_song_data.artist_name)
-    if output_song_data.track_number > 0:
-        new_frames += write_id3_v2_frame("TRCK", str(output_song_data.track_number))
-    if output_song_data.album_year > 0:
-        new_frames += write_id3_v2_frame("TYER", str(output_song_data.album_year))
+    new_frames =  write_id3_v2_frame("TIT2", music_file.final_title)
+    new_frames += write_id3_v2_frame("TALB", music_file.final_album)
+    new_frames += write_id3_v2_frame("TPE1", music_file.final_artist)
+    if music_file.final_track > 0:
+        new_frames += write_id3_v2_frame("TRCK", str(music_file.final_track))
+    if music_file.final_year > 0:
+        new_frames += write_id3_v2_frame("TYER", str(music_file.final_year))
     # if we had an id3v2 tag before, copy the frames that we are not going to replace over from it. 
     # This leaves frames we aren't updating unchanged - an important consideration as some programs 
     # (i.e. windows media player) store their own data in them and in some cases the frames will 
@@ -520,7 +540,7 @@ def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
     # this is far from a standard itself).
     if had_id3v2_tag:
         total_read_size = 10
-        while (total_read_size < tag_size+10):      # ONLY IF WE HAVE ONE DOOFUS
+        while (total_read_size < tag_size+10):
             if tag_data[total_read_size] == '\00':
                 break
             frame_id = tag_data[total_read_size:total_read_size+4]
@@ -554,9 +574,7 @@ def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
     new_header += size_string
     
     # write to the output file
-    track_data = new_header + new_frames + track_data
-    with open(output_file_path, "wb") as f:
-        f.write(track_data)
+    return new_header + new_frames
 
 
 
@@ -566,7 +584,7 @@ def write_id3_v2_tag (input_file_path, output_song_data, output_file_path=""):
 #-----------------------------------------------------------------------#
 # for all words in the list, replace all but the last '.', all '_' and '-' with spaces, then remove 
 # duplicate spaces before finally fixing the capitalisation.
-def clean_string (s):
+def clean_string (s, aggressive_cleaning=False):
     # replace any of '.-_' with spaces (minus the last . for file extension).
     if s[-4:] == ".mp3":
         number_of_dots = s.count(".")
@@ -589,6 +607,14 @@ def clean_string (s):
     
     # recombine the words into a string.
     s = " ".join(words)
+    
+    # specific additional cleaning methods for removing the detritus that commonly inhabits file
+    # names. this should only be performed on filenames because it removes things like [...], which 
+    # in the context of album folders frequently gives the publication year.
+    if aggressive_cleaning:
+        split = re.split("\[.*?\]", s)
+        s = ' '.join(split)
+        s = ' '.join(s.split())
     
     return s
 
@@ -628,7 +654,6 @@ def remove_common_words (string_list):
     return_list = []
     for i in range(number_of_strings):
         return_list.append(word_list[i][0])
-        #string_list[i] = word_list[i][0]
         
         previous_blank = 0
         if (word_list[i][0] == ""):
@@ -636,16 +661,13 @@ def remove_common_words (string_list):
         
         for j in range(1, len(word_list[i])):
             if previous_blank == 0:
-                #string_list[i] += " "
                 return_list[i] += " "
-            #string_list[i] += word_list[i][j]
             return_list[i] += word_list[i][j]
             
             previous_blank = 0
             if word_list[i][j] == "":
                 previous_blank = 1
     
-    #return string_list
     return return_list
 
 
@@ -654,7 +676,7 @@ def clean_folder (file_list):
     # create a cleaned copy of the file list
     cleaned_file_list = []
     for f in file_list:
-        cleaned_file_list.append(clean_string(f))
+        cleaned_file_list.append(clean_string(f, True))
     # remove the common words
     if len(file_list) > 1:
         cleaned_file_list = remove_common_words(cleaned_file_list)
@@ -680,6 +702,14 @@ def generate_new_filepath (target_file_path):
             i += 1
         new_path += str(i)
     return new_path
+
+
+def report_progress (string, percentage):
+    if percentage == 100:
+        sys.stdout.write("%s... %3d%%\n" % (string, percentage))
+    else:
+        sys.stdout.write("%s... %3d%%\r" % (string, percentage))
+        sys.stdout.flush()
 
 
 
@@ -717,6 +747,7 @@ if force_directory_mode == False:
 # create storage system
 music_collection = MusicCollection()
 
+print "Indexing folder structure."
 # Traverse all folders (dirname gives the path to the current directory, dirnames gives the list of
 # subdirectories in the folder, filenames gives the list of files in the folder). When mp3s are 
 # located, build internal data for each file (from file system + id3 tags).
@@ -732,16 +763,21 @@ for dirname, subdirnames, filenames in os.walk(base_folder):
             new_file.load_all_data()
             new_file.compress_all_data()
             music_collection.add(new_file)
-print music_collection
-music_collection.remove_duplicates()
-music_collection.standardise_album_tracks()
 
-# write the newly corrected data back to the tags
+print "Processing indexed files."
+#report_progress("Processing indexed files", 0)
+music_collection.remove_duplicates()
+#report_progress("Processing indexed files", 50)
+music_collection.standardise_album_tracks()
+#report_progress("Processing indexed files", 100)
+
+music_collection.sort_songs_by_track()
+print music_collection
+
+# write the newly corrected data to a new file system with new tags
 new_folder = generate_new_filepath(base_folder)
-print "Creating new directory structure in " + new_folder
+print "Creating new directory structure in %s." % (new_folder)
 music_collection.create_new_filesystem(new_folder)
 
-# write new data to file system
-
-
+# done
 print "Finished."
