@@ -389,6 +389,11 @@ class MusicCollection:
                 if len(album_year_votes.keys()) > 1:
                     print "multiple album year votes found:"
                     print album_year_votes
+                    raise Exception("oh no")
+    
+    
+    def create_new_filesystem (self, new_path):
+        os.mkdir(new_path)
 
 
 
@@ -656,6 +661,27 @@ def clean_folder (file_list):
     return cleaned_file_list
 
 
+# takes the supplied base folder file path and generates a filepath of a new folder in the directory
+# below it
+def generate_new_filepath (target_file_path):
+    # get the absolute file path (use realpath rather than abspath to accomodate symlinks).
+    abs_path = os.path.normpath(os.path.realpath(target_file_path))
+    abs_path_split = os.path.split(abs_path)
+    
+    # check we can go down a level
+    if abs_path_split[0] == '' or abs_path_split[1] == '':
+        raise Exception("ERROR: You cannot ask the program to process the entire file system, please be more specific.")
+    
+    # generate the path of the next level down
+    new_path = os.path.join(abs_path_split[0], 'music_tagger_output')
+    if os.path.isdir(new_path):
+        i = 1
+        while os.path.isdir(new_path + str(i)):
+            i += 1
+        new_path += str(i)
+    return new_path
+
+
 
 
 #-----------------------------------------------------------------------#
@@ -711,6 +737,9 @@ music_collection.remove_duplicates()
 music_collection.standardise_album_tracks()
 
 # write the newly corrected data back to the tags
+new_folder = generate_new_filepath(base_folder)
+print "Creating new directory structure in " + new_folder
+music_collection.create_new_filesystem(new_folder)
 
 # write new data to file system
 
