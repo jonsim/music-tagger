@@ -163,6 +163,7 @@ class MusicFile:
             # As all integer data is non-essential don't bother even mentioning it.
             else:
                 print "Warning: compress_integer_data called with no arguments."
+                return 0
         
         self.final_title  = compress_string_data( self.fp_title,  self.v1_title,  self.v2_title)
         self.final_album  = compress_string_data( self.fp_album,  self.v1_album,  self.v2_album)
@@ -221,7 +222,7 @@ class MusicFile:
                 self.v1_album  = strip_null_bytes(tag_data[63:93])
                 self.v1_year = 0
                 if tag_data[93:97] != "\00\00\00\00":
-                    self.v1_year = int(strip_null_bytes(tag_data[93:97]))
+                    self.v1_year = mint(strip_null_bytes(tag_data[93:97]))
                 self.v1_genre  = ord(tag_data[127])
                 if ord(tag_data[125]) == 0 and ord(tag_data[126]) != 0:
                     # id3 v1.1
@@ -290,9 +291,9 @@ class MusicFile:
                     elif frame_id == "TPE1":
                         self.v2_artist = f.read(frame_size)[1:]
                     elif frame_id == "TRCK":
-                        self.v2_track  = int(f.read(frame_size)[1:].split('/')[0])
+                        self.v2_track  = mint(f.read(frame_size)[1:].split('/')[0])
                     elif frame_id == "TYER":
-                        self.v2_year   = int(f.read(frame_size)[1:])
+                        self.v2_year   = mint(f.read(frame_size)[1:5])
                 # clean the strings generated
                 self.v2_title  = clean_string(self.v2_title,  True)
                 self.v2_artist = clean_string(self.v2_artist, True)
@@ -356,7 +357,7 @@ class MusicCollection:
                     k3 = song.final_title
                     if k3 in duplicate_tracker:
                         if duplicate_tracker[k3].final_track != song.final_track or duplicate_tracker[k3].final_year != song.final_year:
-                            print "WARNING: Songs with duplicate artist, album and title found but differing track (%d vs %d) and year (%d vs %d) data. Keeping the first." % (duplicate_tracker[k3].final_track, song.final_track, duplicate_tracker[k3].final_year, song.final_year)
+                            print "WARNING: Songs with duplicate artist, album and title found but differing track (%d vs %d) and/or year (%d vs %d) data. Keeping the first." % (duplicate_tracker[k3].final_track, song.final_track, duplicate_tracker[k3].final_year, song.final_year)
                         to_be_removed.append(song)
                     else:
                         duplicate_tracker[k3] = song
@@ -392,7 +393,6 @@ class MusicCollection:
         for k1 in self.albums.keys():
             for k2 in self.albums[k1].keys():
                 self.albums[k1][k2].sort(key=lambda x: x.final_track)
-        
     
     
     def create_new_filesystem (self, new_path):
@@ -416,6 +416,19 @@ class MusicCollection:
 #-----------------------------------------------------------------------#
 #--------------------    FILE HANDLING FUNCTIONS    --------------------#
 #-----------------------------------------------------------------------#
+# modified int conversion method allowing a null string to be converted to 0 rather than a ValueError.
+def mint (s):
+    if s == "":
+        r = 0
+    try:
+        r = int(s)
+    except ValueError:
+        print "WARNING: '%s' attempted conversion to integer. Returning 0" % (s)
+        r = 0
+        pass
+    return r
+
+
 # Strips extraneous whitespace and null bytes from some given data, leaving a string.
 def strip_null_bytes (data):
     return data.replace("\00", "").strip()
