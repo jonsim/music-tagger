@@ -36,11 +36,15 @@
 #-----------------------------------------------------------------------#
 import sys, string, os, re, operator
 from collections import defaultdict
-# This project makes use of the Levenshtein Python extension for the string comparisons (edit 
-# distance and the like). A copy of it is provided with this project, and the most recent version 
-# or more up to date information can be found at the project page: http://code.google.com/p/pylevenshtein/
-# To install, simply navigate to the python-Levenshtein-0.10.1 directory and run the command:
+# This project makes use of the Levenshtein Python extension for string
+# comparisons (edit distance and the like - used for fixing inconsistently
+# named files). A copy of it is provided with this project, and the most
+# recent version or more up to date information can be found at the 
+# project page: http://code.google.com/p/pylevenshtein/
+# To install, simply navigate to the python-Levenshtein-0.10.1 directory
+# and run the command:
 # python setup.py install
+# NB: This requires that the 'python-dev' package is installed.
 import Levenshtein
 
 
@@ -85,7 +89,7 @@ class MusicFile:
     # Note that not giving it a cleaned filename will cause one to be generated automatically for
     # you. The downside of this is that when automatic cleaning of the filename occurs it is treated
     # in isolation to all other files in the directory (as it does not have access to them) so it 
-    # cannot perform common word removal or anything clever.
+    # cannot perform common word removal or other similar, contextual techniques.
     def __init__ (self, file_path, cleaned_filename=""):
         if file_path == "":
             raise Exception("Cannot create a MusicFile with an empty file_path.")
@@ -134,10 +138,10 @@ class MusicFile:
                 v1_v2_distance = Levenshtein.distance(v1,      v2[:30])
             
             # If fp is similar to one of them, return fp. Otherwise if v1 and v2 are similar, return
-            # v2. Otherwise just return fp (as good as random chance, maybe print something).
-            if (fp and v1 and fp_v1_distance < DISTANCE_THRESHOLD) or (fp and v2 and fp_v2_distance < DISTANCE_THRESHOLD):
+            # v2. Otherwise just return fp (as good as random chance - something should probably be printed).
+            if (fp and v1 and (fp_v1_distance < DISTANCE_THRESHOLD)) or (fp and v2 and (fp_v2_distance < DISTANCE_THRESHOLD)):
                 return fp
-            elif v1 and v2 and v1_v2_distance < DISTANCE_THRESHOLD:
+            elif v1 and v2 and (v1_v2_distance < DISTANCE_THRESHOLD):
                 return v2
             elif fp:
                 return fp
@@ -147,12 +151,12 @@ class MusicFile:
                 return v1
             else:
                 # As all string data is essential, raise an exception if a load is missing.
-                raise Exception("compress_string_data called with no arguments.")
+                raise Exception("compress_string_data called with no readable arguments.")
         
         def compress_integer_data (fp=None, v1=None, v2=None):
-            if (fp and v1 and fp == v1) or (fp and v2 and fp == v2):
+            if (fp and v1 and (fp == v1)) or (fp and v2 and (fp == v2)):
                 return fp
-            elif v1 and v2 and v1 == v2:
+            elif v1 and v2 and (v1 == v2):
                 return v2
             elif fp:
                 return fp
@@ -160,8 +164,8 @@ class MusicFile:
                 return v2
             elif v1:
                 return v1
-            # As all integer data is non-essential don't bother even mentioning it.
             else:
+                # Integer data is non-essential so don't bother even mentioning it.
                 #print "WARNING: compress_integer_data called with no arguments."
                 return 0
         
@@ -174,7 +178,7 @@ class MusicFile:
         self.final_data_set = True
     
     
-    # Loads all the data possible. Simply a convenience method.
+    # Loads all the data possible. Convenience method.
     def load_all_data (self):
         self.load_file_path_info()
         self.load_id3v1_tag()
@@ -186,7 +190,7 @@ class MusicFile:
     # from clean_folder()) as this method will have access to only the single file, not the entire
     # folder of files which is necessary for the full cleaning (e.g. removing repeated words).
     def load_file_path_info (self):
-        # Attemtpt to collect information from the file's path (the album / artist).
+        # Attempt to collect information from the file's path (the album / artist).
         file_path_split = self.file_path.split('/')
         # If correctly set up: -1 holds the file name; -2 the album folder; -3 the artist folder.
         if len(file_path_split) >= 3:
