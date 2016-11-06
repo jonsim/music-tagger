@@ -34,10 +34,10 @@ class TrackFile:
         if file_path == "":
             raise Exception("Cannot create a TrackFile with an empty file_path.")
         self.file_path = file_path
-        if cleaned_filename == "":
-            self.cleaned_filename = clean_string(file_path.split('/')[-1], True)
-        else:
+        if cleaned_filename:
             self.cleaned_filename = cleaned_filename
+        else:
+            self.cleaned_filename = TrackData.clean_string(file_path.split('/')[-1], True)
     
     
     def __str__(self):

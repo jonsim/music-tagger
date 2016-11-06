@@ -46,7 +46,7 @@ class TrackCollection:
         self.file_count += 1
     
     
-    def remove_duplicates(self):
+    def remove_duplicates(self, report_progress=None):
         """ Look for duplicate songs and remove them.
         
         Duplicate artists and albums are not a problem - you need a music file
@@ -54,14 +54,20 @@ class TrackCollection:
         either have duplicate songs, or different songs with slightly different
         artist/album names. This should be corrected by the TrackFile's
         compression step. If it wasn't properly picked up then (i.e. the names
-        were too dissimilar) We have no further information at this point so we
+        were too dissimilar) we have no further information at this point so we
         can't fix it.
-
+        
+        Args:
+            report_progress: Optional two argument function to report progress
+                where the first argument is the total number of items and the
+                second argument is the completed number of items.
+        
         Returns:
             None
         """
         # TODO: Compilations are going to go crazy here... revist this later,
         # probably with a TrackFile flag for (probable) compilation tracks.
+        processed_count = 0
         for k1 in self.albums.keys():
             for k2 in self.albums[k1].keys():
                 duplicate_tracker = {}
@@ -77,21 +83,29 @@ class TrackCollection:
                         to_be_removed.append(song)
                     else:
                         duplicate_tracker[k3] = song
+                    processed_count += 1
+                    if report_progress:
+                        report_progress(self.file_count, processed_count)
                 [self.albums[k1][k2].remove(song) for song in to_be_removed]
     
     
-    def standardise_album_tracks(self):
+    def standardise_album_tracks(self, report_progress=None):
         """ Standardises track data between tracks within each album.
         
         Takes a vote between tracks within albums to standardise information on
         the album year and track numbering.
+        
+        Args:
+            report_progress: Optional two argument function to report progress
+                where the first argument is the total number of items and the
+                second argument is the completed number of items.
         
         Returns:
             None
         """
         # TODO Compilations are going to wreak havoc here too, see note on
         # remove_duplicates.
-        # Pass through all the songs
+        processed_count = 0
         for k1 in self.albums.keys():
             for k2 in self.albums[k1].keys():
                 # First collect the number of times each different album year data appears. Ideally 
@@ -102,6 +116,9 @@ class TrackCollection:
                         album_year_votes[song.final.year] += 1
                     else:
                         album_year_votes[song.final.year] =  1
+                    processed_count += 1
+                    if report_progress:
+                        report_progress(self.file_count, processed_count)
                 # If there is more than one album year listed, standardise. A good argument could be
                 # made for any number of strategies for standardising. Currently the majority vote
                 # takes it, but the latest 'sensible' year would also be an idea.

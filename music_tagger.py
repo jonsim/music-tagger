@@ -37,7 +37,7 @@
 #import sys, string, os, re, operator
 import sys, os, argparse
 #from collections import defaultdict
-import TrackCollection, TrackFile, TrackData
+import TrackCollection, TrackFile, TrackData, Progress
 # This project makes use of the Levenshtein Python extension for string
 # comparisons (edit distance and the like - used for fixing inconsistently
 # named files). A copy of it is provided with this project, and the most
@@ -96,68 +96,70 @@ def extract_track_data(file_path):
 #-------------------    STRING HANDLING FUNCTIONS    -------------------#
 #-----------------------------------------------------------------------#
 
-# Removes the words repeated in the same place in the strings in the list. This is necessary in the
-# context of song filenames to undo filenames which include the artist or album name.
-def remove_common_words (string_list):
-    number_of_strings = len(string_list)
+class CleanFilename:
+    def __init__(self, filename):
+        self.original = filename
+        self.cleaned = TrackData.clean_string(filename, True)
+
+
+def remove_common_words (file_list):
+    """ Removes words repeated in the same place in all strings in a list.
     
-    # split each of the strings in the list into a list of words.
-    word_list = []
-    for i in range(number_of_strings):
-        word_list.append(string_list[i].split())
+    This is necessary in the context of song filenames to undo filenames which
+    include the artist or album name.
+
+    Args:
+        file_list: list of CleanFilename. The cleaned field will be used for
+            comparison. The list is modified in place.
     
-    # calculate the number of words in the shortest string.
-    len_shortest_string = len(word_list[0])
-    for i in range(1, number_of_strings):
-        if len(word_list[i]) < len_shortest_string:
-            len_shortest_string = len(word_list[i])
+    Returns:
+        A list of CleanFilenames with the common words removed.
+    """
     
-    # for each of the possible shared words in the strings, check the words against the first word
-    # for repetition, removing any that appear in the same place in every word (though only if the
-    # run is at the start of the string (or 1 indented)).
+    # Split each of the strings in the list into a list of words.
+    word_list = [(f.cleaned.split()) for f in file_list]
+    
+    # Calculate the number of words in the shortest string.
+    len_shortest_string = len(min(word_list, key=len))
+    
+    # For each of the possible shared words in the strings, check against the
+    # first word for repetition, removing any that appear in the same place in
+    # every word (though only if the run is at the start of the string (or 1
+    # indented)).
+    file_count = len(file_list)
     for i in range(len_shortest_string):
-        exitted_early = 0
-        for j in range(1, number_of_strings):
+        all_words_match = True
+        for j in range(1, file_count):
             if word_list[0][i] != word_list[j][i]:
-                exitted_early = 1
+                all_words_match = False
                 break
-        if exitted_early == 0:
-            for k in range(number_of_strings):
+        if all_words_match:
+            for k in range(file_count):
                 word_list[k][i] = ""
         elif i > 0:
             break
     
-    # recombine the word lists into a list of strings and return (removing additional spaces).
-    return_list = []
-    for i in range(number_of_strings):
-        return_list.append(word_list[i][0])
-        
-        previous_blank = 0
-        if (word_list[i][0] == ""):
-            previous_blank = 1
-        
-        for j in range(1, len(word_list[i])):
-            if previous_blank == 0:
-                return_list[i] += " "
-            return_list[i] += word_list[i][j]
-            
-            previous_blank = 0
-            if word_list[i][j] == "":
-                previous_blank = 1
+    # Recombine the words for each file into a single name (removing additional
+    # spaces) and overwrite the cleaned field.
+    for i in range(file_count):
+        file_list[i].cleaned = ' '.join([(w) for w in word_list[i] if w])
     
-    return return_list
+    return file_list
 
 
-# cleans all the files given to it (the cleaning only really makes sense per album folder).
 def clean_folder (file_list):
-    # create a cleaned copy of the file list
-    cleaned_file_list = []
-    for f in file_list:
-        cleaned_file_list.append(TrackData.clean_string(f, True))
-    # remove the common words
-    if len(file_list) > 1:
-        cleaned_file_list = remove_common_words(cleaned_file_list)
-    return cleaned_file_list
+    """ Cleans all filenames given and removes common words from them.
+    
+    Args:
+        file_list: list of strings representing filenames
+    
+    Returns:
+        A list of CleanFilenames
+    """
+    if not file_list:
+        return []
+    cleaned_file_list = [(CleanFilename(f)) for f in file_list]
+    return remove_common_words(cleaned_file_list)
 
 
 # takes the supplied base folder file path and generates a filepath of a new folder in the directory
@@ -179,15 +181,6 @@ def generate_new_filepath (target_file_path):
             i += 1
         new_path += str(i)
     return new_path
-
-
-def report_progress (string, percentage):
-    if percentage == 100:
-        sys.stdout.write("%s... %3d%%\n" % (string, percentage))
-    else:
-        sys.stdout.write("%s... %3d%%\r" % (string, percentage))
-        sys.stdout.flush()
-
 
 
 
@@ -214,33 +207,48 @@ def main():
             'functionality to deal with this scenario has not yet been\n' \
             'implemented. Sorry!'
         sys.exit()
-
-    # create storage system
-    music_collection = TrackCollection.TrackCollection()
-
-    print "Indexing folder structure..."
-    # Recursively tranverse from the provided root directory:
+    
+    # Progress reporting string constants.
+    SEARCHING_STATUS_STRING     = '[Step 1/5] Searching file structure'
+    INDEXING_STATUS_STRING      = '[Step 2/5] Indexing tracks'
+    PROCESSING_STATUS_STRING    = '[Step 3/5] Processing indexed tracks'
+    STANDARDISING_STATUS_STRING = '[Step 4/5] Standardising track names'
+    REWRITING_STATUS_STRING     = '[Step 5/5] Rewriting tracks'
+    
+    # Recursively tranverse from the provided root directory looking for mp3s:
     #  * dirname gives the path to the current directory
     #  * dirnames gives the list of subdirectories in the folder
     #  * filenames gives the list of files in the folder
-    # When mp3s are located, build internal data for each file.
+    Progress.state(SEARCHING_STATUS_STRING)
+    track_list = []
     for dirname, subdirnames, filenames in os.walk(args.directory):
         cleaned_filenames = clean_folder(filenames)
-        for i in range(len(filenames)):
-            if filenames[i][-4:] == ".mp3":
+        for f in cleaned_filenames:
+            if f.original[-4:] == '.mp3':
                 # Extract all the information possible from the song and add it.
-                file_path = os.path.join(dirname, filenames[i])
-                new_file = TrackFile.TrackFile(file_path, cleaned_filenames[i])
-                new_file.load_all_data()
-                new_file.finalise_data()
-                music_collection.add(new_file)
+                file_path = os.path.join(dirname, f.original)
+                new_file = TrackFile.TrackFile(file_path, f.cleaned)
+                track_list.append(new_file)
+    track_count = len(track_list)
+    
+    # create storage system
+    music_collection = TrackCollection.TrackCollection()
 
-    print "Processing indexed files."
-    #report_progress("Processing indexed files", 0)
-    music_collection.remove_duplicates()
-    #report_progress("Processing indexed files", 50)
-    music_collection.standardise_album_tracks()
-    #report_progress("Processing indexed files", 100)
+    # Add all located files to the collection.
+    Progress.report(INDEXING_STATUS_STRING, track_count, 0)
+    for i in range(track_count):
+        track_list[i].load_all_data()
+        track_list[i].finalise_data()
+        music_collection.add(track_list[i])
+        Progress.report(INDEXING_STATUS_STRING, track_count, i+1)
+    
+    # Process the music collection.
+    def progress_stub1(total_units, done_units):
+        Progress.report(PROCESSING_STATUS_STRING, total_units, done_units)
+    def progress_stub2(total_units, done_units):
+        Progress.report(STANDARDISING_STATUS_STRING, total_units, done_units)
+    music_collection.remove_duplicates(progress_stub1)
+    music_collection.standardise_album_tracks(progress_stub2)
 
     if args.verbose:
         music_collection.sort_songs_by_track()
