@@ -117,12 +117,12 @@ class TrackCollection:
         # TODO Compilations are going to wreak havoc here too, see note on
         # remove_duplicates.
         processed_count = 0
-        for k1 in self.albums.keys():
-            for k2 in self.albums[k1].keys():
+        for artist in self.albums:
+            for album in self.albums[artist]:
                 # First collect the number of times each different album year data appears. Ideally 
                 # all tracks should have the same year.
                 album_year_votes = {}
-                for song in self.albums[k1][k2]:
+                for song in self.albums[artist][album]:
                     if song.final.year in album_year_votes:
                         album_year_votes[song.final.year] += 1
                     else:
@@ -142,8 +142,8 @@ class TrackCollection:
                     if warnings is not None:
                         warnings.append('Multiple album years for %s ' \
                             'by %s: %s. Using %d.' \
-                            % (k2, k1, str(sorted_album_year_votes), correct_year ))
-                    for song in self.albums[k1][k2]:
+                            % (album, artist, str(sorted_album_year_votes), correct_year ))
+                    for song in self.albums[artist][album]:
                         song.final.year = correct_year
     
     
@@ -153,9 +153,9 @@ class TrackCollection:
         Returns:
             None
         """
-        for k1 in self.albums.keys():
-            for k2 in self.albums[k1].keys():
-                self.albums[k1][k2].sort(key=lambda x: x.final.track)
+        for artist in self.albums:
+            for album in self.albums[artist]:
+                self.albums[artist][album].sort(key=lambda x: x.final.track)
     
     
     def create_new_filesystem (self, new_path):
@@ -168,16 +168,16 @@ class TrackCollection:
             None
         """
         os.mkdir(new_path)
-        for artist_name in self.albums.keys():
-            artist_subpath = '/%s' % (artist_name)
+        for artist in self.albums:
+            artist_subpath = '/%s' % (artist)
             os.mkdir(new_path + artist_subpath)
-            for album_name in self.albums[artist_name].keys():
-                if self.albums[artist_name][album_name][0].final.year != 0:
-                    album_subpath = '/[%d] %s' % (self.albums[artist_name][album_name][0].final.year, album_name)
+            for album in self.albums[artist]:
+                if self.albums[artist][album][0].final.year != 0:
+                    album_subpath = '/[%d] %s' % (self.albums[artist][album][0].final.year, album)
                 else:
-                    album_subpath = '/%s' % (album_name)
+                    album_subpath = '/%s' % (album)
                 os.mkdir(new_path + artist_subpath + album_subpath)
-                for song in self.albums[artist_name][album_name]:
+                for song in self.albums[artist][album]:
                     song_subpath = '/%02d %s.mp3' % (song.final.track, song.final.title)
                     create_new_file(song, new_path + artist_subpath + album_subpath + song_subpath)
 
