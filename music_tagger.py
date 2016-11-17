@@ -183,6 +183,11 @@ def generate_new_filepath (target_file_path):
     return new_path
 
 
+def print_warnings(warnings):
+    for warning in warnings:
+        sys.stdout.write("WARNING: %s\n" % (warning))
+    del warnings[:]
+
 
 #-----------------------------------------------------------------------#
 #---------------------------    MAIN CODE    ---------------------------#
@@ -209,11 +214,13 @@ def main():
         sys.exit()
     
     # Progress reporting string constants.
-    SEARCHING_STATUS_STRING     = '[Step 1/5] Searching file structure'
-    INDEXING_STATUS_STRING      = '[Step 2/5] Indexing tracks'
-    PROCESSING_STATUS_STRING    = '[Step 3/5] Processing indexed tracks'
-    STANDARDISING_STATUS_STRING = '[Step 4/5] Standardising track names'
-    REWRITING_STATUS_STRING     = '[Step 5/5] Rewriting tracks'
+    SEARCHING_STATUS_STRING     = '[1/5] Searching file structure'
+    INDEXING_STATUS_STRING      = '[2/5] Indexing tracks'
+    PROCESSING_STATUS_STRING    = '[3/5] Processing indexed tracks'
+    STANDARDISING_STATUS_STRING = '[4/5] Standardising track data'
+    REWRITING_STATUS_STRING     = '[5/5] Rewriting tracks'
+    
+    warnings = []
     
     # Recursively tranverse from the provided root directory looking for mp3s:
     #  * dirname gives the path to the current directory
@@ -235,29 +242,37 @@ def main():
     music_collection = TrackCollection.TrackCollection()
 
     # Add all located files to the collection.
-    Progress.report(INDEXING_STATUS_STRING, track_count, 0)
     for i in range(track_count):
         track_list[i].load_all_data()
         track_list[i].finalise_data()
         music_collection.add(track_list[i])
         Progress.report(INDEXING_STATUS_STRING, track_count, i+1)
+    print_warnings(warnings)
     
-    # Process the music collection.
-    def progress_stub1(total_units, done_units):
+    # Remove all duplicate files from the collection.
+    def progress_stub(total_units, done_units):
         Progress.report(PROCESSING_STATUS_STRING, total_units, done_units)
-    def progress_stub2(total_units, done_units):
+    music_collection.remove_duplicates(warnings, progress_stub)
+    print_warnings(warnings)
+    
+    # Standardise track data on the remaining files.
+    def progress_stub(total_units, done_units):
         Progress.report(STANDARDISING_STATUS_STRING, total_units, done_units)
-    music_collection.remove_duplicates(progress_stub1)
-    music_collection.standardise_album_tracks(progress_stub2)
+    music_collection.standardise_album_tracks(warnings, progress_stub)
+    print_warnings(warnings)
 
     if args.verbose:
         music_collection.sort_songs_by_track()
         print music_collection
 
-    # write the newly corrected data to a new file system with new tags
-    #new_folder = generate_new_filepath(args.directory)
-    #print "Creating new directory structure in %s." % (new_folder)
-    #music_collection.create_new_filesystem(new_folder)
+    if args.write:
+        print "TBD"
+        # write the newly corrected data to a new file system with new tags
+        #new_folder = generate_new_filepath(args.directory)
+        #print "Creating new directory structure in %s." % (new_folder)
+        #music_collection.create_new_filesystem(new_folder)
+    else:
+        Progress.skip(REWRITING_STATUS_STRING)
 
     # done
     print "Finished."

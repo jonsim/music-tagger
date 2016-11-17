@@ -17,10 +17,10 @@ class TrackCollection:
     
     def __str__(self):
         s =  "---- Album Dictionary Mappings ----\n"
-        for k1 in self.albums.keys():
-            for k2 in self.albums[k1].keys():
-                s += "[%s][%s]\n" % (k1, k2)
-                for song in self.albums[k1][k2]:
+        for artist in self.albums:
+            for album in self.albums[artist]:
+                s += "[%s][%s]\n" % (artist, album)
+                for song in self.albums[artist][album]:
                     s += "  %02d %s\n" % (song.final.track, song.final.title)
         s += "-----------------------------------"
         return s
@@ -35,18 +35,21 @@ class TrackCollection:
 
         Returns:
             None
+        
+        Raises:
+            Exception: The given track was not finalised.
         """
         # TODO Compilations are going to wreak havoc here too, see note on
         # remove_duplicates.
         if not track.finalised:
-            raise Exception("add called with a non-finalised track")
+            raise Exception("TrackCollection cannot add a non-finalised track")
         if not self.albums[track.final.artist][track.final.album]:
             self.albums[   track.final.artist][track.final.album] = []
         self.albums[       track.final.artist][track.final.album].append(track)
         self.file_count += 1
     
     
-    def remove_duplicates(self, report_progress=None):
+    def remove_duplicates(self, warnings=None, report_progress=None):
         """ Look for duplicate songs and remove them.
         
         Duplicate artists and albums are not a problem - you need a music file
@@ -68,28 +71,36 @@ class TrackCollection:
         # TODO: Compilations are going to go crazy here... revist this later,
         # probably with a TrackFile flag for (probable) compilation tracks.
         processed_count = 0
-        for k1 in self.albums.keys():
-            for k2 in self.albums[k1].keys():
+        for artist in self.albums:
+            for album in self.albums[artist]:
                 duplicate_tracker = {}
                 to_be_removed = []
-                for song in self.albums[k1][k2]:
-                    k3 = song.final.title
-                    if k3 in duplicate_tracker:
-                        if duplicate_tracker[k3].final.track != song.final.track or duplicate_tracker[k3].final.year != song.final.year:
-                            #print "WARNING: Songs with duplicate artist, album and title found (at %s and %s) but differing track (%d vs %d) and/or year (%d vs %d) data. Keeping the first." % (duplicate_tracker[k3].file_path, song.file_path, duplicate_tracker[k3].final.track, song.final.track, duplicate_tracker[k3].final.year, song.final.year)
-                            print "WARNING: Songs with duplicate information found:"
-                            print "  %s:%s" % ('{:<80}'.format(duplicate_tracker[k3].file_path), duplicate_tracker[k3])
-                            print "  %s:%s" % ('{:<80}'.format(song.file_path), song)
+                for song in self.albums[artist][album]:
+                    title = song.final.title
+                    # If a track with this title already exists within this
+                    # artist/album tuple, mark it as a duplicate (and optionally
+                    # generate a warning
+                    if title in duplicate_tracker:
+                        duplicate = duplicate_tracker[title]
+                        if warnings is not None and ( \
+                                duplicate.final.track != song.final.track or \
+                                duplicate.final.year  != song.final.year):
+                            warnings.append('Found songs with the same artist, ' \
+                                'album and title but differing track or year:\n' \
+                                '  %s\n    %s\n  %s\n    %s' % ( \
+                                    duplicate, duplicate.file_path, \
+                                    song, song.file_path))
                         to_be_removed.append(song)
                     else:
-                        duplicate_tracker[k3] = song
+                        duplicate_tracker[title] = song
                     processed_count += 1
                     if report_progress:
                         report_progress(self.file_count, processed_count)
-                [self.albums[k1][k2].remove(song) for song in to_be_removed]
+                [self.albums[artist][album].remove(song) for song in to_be_removed]
+                self.file_count -= len(to_be_removed)
     
     
-    def standardise_album_tracks(self, report_progress=None):
+    def standardise_album_tracks(self, warnings=None, report_progress=None):
         """ Standardises track data between tracks within each album.
         
         Takes a vote between tracks within albums to standardise information on
@@ -128,7 +139,10 @@ class TrackCollection:
                         correct_year = sorted_album_year_votes[0][0]
                     else:
                         correct_year = sorted_album_year_votes[1][0]
-                    print "WARNING: multiple album year votes found for %s by %s: %s. Using %d." % (k2, k1, str(sorted_album_year_votes), correct_year )
+                    if warnings is not None:
+                        warnings.append('Multiple album years for %s ' \
+                            'by %s: %s. Using %d.' \
+                            % (k2, k1, str(sorted_album_year_votes), correct_year ))
                     for song in self.albums[k1][k2]:
                         song.final.year = correct_year
     

@@ -9,7 +9,23 @@ class TrackData:
     genre  = None
     
     def __str__ (self):
+        """ Override default str method """
         return "%02d %s - %s by %s in %d" % (self.track, self.title, self.album, self.artist, self.year)
+    
+    def __eq__(self, other):
+        """ Override default equality method """
+        if isinstance(other, self.__class__):
+            # Shorthand for saying all attributes must be equivalent
+            return self.__dict__ == other.__dict__
+        return False
+    
+    def __ne__(self, other):
+        """ Override default non-equality method """
+        return not self.__eq__(other)
+    
+    def __hash__(self):
+        """ Override default hash behaviour """
+        return hash(tuple(sorted(self.__dict__.items())))
     
     def clean(self, aggressive_cleaning=False):
         """ Cleans all string data on this TrackData.
