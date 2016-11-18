@@ -34,14 +34,26 @@
 #-----------------------------------------------------------------------#
 #----------------------------    IMPORTS    ----------------------------#
 #-----------------------------------------------------------------------#
-#import sys, string, os, re, operator
-import sys, os, argparse
-#from collections import defaultdict
-import TrackCollection, TrackFile, TrackData, Progress
+"""Imports:
+    sys: console output
+    os: walking the directory structure
+    argparse: parsing command line arguments and providing help
+    TrackData: storing data from a single source about a track
+    TrackFile: collecting all a track's TrackData together
+    TrackCollection: collecting all TrackFiles under in the searched directory
+    Progress: formatting progress messages
+"""
+import sys
+import os
+import argparse
+import TrackData
+import TrackFile
+import TrackCollection
+import Progress
 # This project makes use of the Levenshtein Python extension for string
 # comparisons (edit distance and the like - used for fixing inconsistently
 # named files). A copy of it is provided with this project, and the most
-# recent version or more up to date information can be found at the 
+# recent version or more up to date information can be found at the
 # project page: http://code.google.com/p/pylevenshtein/
 # To install, simply navigate to the python-Levenshtein-0.10.1 directory
 # and run the command:
@@ -49,6 +61,12 @@ import TrackCollection, TrackFile, TrackData, Progress
 # NB: This requires that the 'python-dev' package is installed.
 
 
+# Progress reporting string constants.
+SEARCHING_STATUS_STRING = '[1/5] Searching file structure'
+INDEXING_STATUS_STRING = '[2/5] Indexing tracks'
+PROCESSING_STATUS_STRING = '[3/5] Processing indexed tracks'
+STANDARDISING_STATUS_STRING = '[4/5] Standardising track data'
+REWRITING_STATUS_STRING = '[5/5] Rewriting tracks'
 
 
 #-----------------------------------------------------------------------#
@@ -56,11 +74,11 @@ import TrackCollection, TrackFile, TrackData, Progress
 #-----------------------------------------------------------------------#
 def create_new_file(write_mode, music_file, output_file_path):
     if music_file.file_path == output_file_path and not write_mode:
-        raise Exception("write_id3_v1_tag called and instructed to write over the file, however write mode (-f) is not enabled.")
-    
+        raise Exception("write_id3_v1_tag called and instructed to write over "
+                        "the file, however write mode (-f) is not enabled.")
     track_data = extract_track_data(music_file.file_path)
-    id3v1_tag  = create_id3v1_tag(music_file)
-    id3v2_tag  = create_id3v2_tag(music_file)
+    id3v1_tag = create_id3v1_tag(music_file)
+    id3v2_tag = create_id3v2_tag(music_file)
     with open(output_file_path, "wb") as f:
         f.write(id3v2_tag + track_data + id3v1_tag)
 
@@ -69,7 +87,7 @@ def extract_track_data(file_path):
     # read the entire input file in.
     with open(file_path, "rb") as f:
         track_data = f.read()
-    
+
     # check if we have an id3v2 tag and strip it from the track data.
     if track_data[:3] == "ID3":
         # check its not messed up
@@ -79,14 +97,14 @@ def extract_track_data(file_path):
         # header (but not the extended header if one exists). Thus tag_size = total_tag_size - 10.
         tag_size = (ord(track_data[6]) << 21) + (ord(track_data[7]) << 14) + (ord(track_data[8]) << 7) + (ord(track_data[9]))
         track_data = track_data[tag_size+10:]
-    
+
     # check if we have an id3v1 tag and strip it from the track data.
     if track_data[-128:-125] == "TAG":                      # check for v1.0/v1.1
         if track_data[-(128+227):-(128+227-4)] == "TAG+":   # check for v1.0 extended
             track_data = track_data[:-(128+227)]
         else:
             track_data = track_data[:-128]
-    
+
     # return what's left
     return track_data
 
@@ -96,32 +114,37 @@ def extract_track_data(file_path):
 #-------------------    STRING HANDLING FUNCTIONS    -------------------#
 #-----------------------------------------------------------------------#
 
-class CleanFilename:
+class CleanFilename(object):
+    """A tuple of cleaned filename and the original
+
+    Attributes:
+        original: string original filename
+        cleaned: string post-processed filename"""
     def __init__(self, filename):
         self.original = filename
         self.cleaned = TrackData.clean_string(filename, True)
 
 
-def remove_common_words (file_list):
+def remove_common_words(file_list):
     """ Removes words repeated in the same place in all strings in a list.
-    
+
     This is necessary in the context of song filenames to undo filenames which
     include the artist or album name.
 
     Args:
         file_list: list of CleanFilename. The cleaned field will be used for
             comparison. The list is modified in place.
-    
+
     Returns:
         A list of CleanFilenames with the common words removed.
     """
-    
+
     # Split each of the strings in the list into a list of words.
     word_list = [(f.cleaned.split()) for f in file_list]
-    
+
     # Calculate the number of words in the shortest string.
     len_shortest_string = len(min(word_list, key=len))
-    
+
     # For each of the possible shared words in the strings, check against the
     # first word for repetition, removing any that appear in the same place in
     # every word (though only if the run is at the start of the string (or 1
@@ -138,21 +161,21 @@ def remove_common_words (file_list):
                 word_list[k][i] = ""
         elif i > 0:
             break
-    
+
     # Recombine the words for each file into a single name (removing additional
     # spaces) and overwrite the cleaned field.
     for i in range(file_count):
         file_list[i].cleaned = ' '.join([(w) for w in word_list[i] if w])
-    
+
     return file_list
 
 
-def clean_folder (file_list):
+def clean_folder(file_list):
     """ Cleans all filenames given and removes common words from them.
-    
+
     Args:
         file_list: list of strings representing filenames
-    
+
     Returns:
         A list of CleanFilenames
     """
@@ -164,15 +187,16 @@ def clean_folder (file_list):
 
 # takes the supplied base folder file path and generates a filepath of a new folder in the directory
 # below it
-def generate_new_filepath (target_file_path):
+def generate_new_filepath(target_file_path):
     # get the absolute file path (use realpath rather than abspath to accomodate symlinks).
     abs_path = os.path.normpath(os.path.realpath(target_file_path))
     abs_path_split = os.path.split(abs_path)
-    
+
     # check we can go down a level
     if abs_path_split[0] == '' or abs_path_split[1] == '':
-        raise Exception("ERROR: You cannot ask the program to process the entire file system, please be more specific.")
-    
+        raise Exception("ERROR: You cannot ask the program to process the entire "
+                        "file system, please be more specific.")
+
     # generate the path of the next level down
     new_path = os.path.join(abs_path_split[0], 'music_tagger_output')
     if os.path.isdir(new_path):
@@ -184,6 +208,15 @@ def generate_new_filepath (target_file_path):
 
 
 def print_warnings(warnings):
+    """Outputs all warnings and clears the list
+
+    Args:
+        warnings: list of string warnings to print. This list will be cleared
+            once printed.
+
+    Returns:
+        None
+    """
     for warning in warnings:
         sys.stdout.write("WARNING: %s\n" % (warning))
     del warnings[:]
@@ -193,35 +226,31 @@ def print_warnings(warnings):
 #---------------------------    MAIN CODE    ---------------------------#
 #-----------------------------------------------------------------------#
 def main():
-    parser = argparse.ArgumentParser(description='A small program to tidy music '
-        'files. It recursively explores a given directory and standardises '
-        'folder structures, file naming conventions and ID3 tags.')
-    parser.add_argument('directory', help='directory to recursively search for '
-        'music files in')
-    parser.add_argument('-v', '--verbose', action='store_true', help='verbose mode')
-    parser.add_argument('-f', '--write', action='store_true', help='write changes '
-        'to disk. Default is to do a dry run (no file changes)')
-    parser.add_argument('-d', '--directory-mode', action='store_true', help=
+    """Main function"""
+    parser = argparse.ArgumentParser(description=\
+        'A small program to tidy music files. It recursively explores a given '
+        'directory and standardises folder structures, file naming conventions '
+        'and ID3 tags.')
+    parser.add_argument('directory', help=\
+        'directory to recursively search for music files in')
+    parser.add_argument('-v', '--verbose', action='store_true', help=\
+        'verbose mode')
+    parser.add_argument('-f', '--write', action='store_true', help=\
+        'write changes to disk. Default is to do a dry run (no file changes)')
+    parser.add_argument('-d', '--directory-mode', action='store_true', help=\
         'force the directory structure to be the ground truth, using its '
         'structure (artist/album/song.mp3) for the tag')
     args = parser.parse_args()
     # Parse command line arguments.
     if not args.directory_mode:
         print 'Error: directory mode (-d) is not enabled (i.e. you are telling\n' \
-            'the program you have a mismatched folder structure), however the\n' \
-            'functionality to deal with this scenario has not yet been\n' \
-            'implemented. Sorry!'
+              'the program you have a mismatched folder structure), however the\n'\
+              'functionality to deal with this scenario has not yet been\n' \
+              'implemented. Sorry!'
         sys.exit()
-    
-    # Progress reporting string constants.
-    SEARCHING_STATUS_STRING     = '[1/5] Searching file structure'
-    INDEXING_STATUS_STRING      = '[2/5] Indexing tracks'
-    PROCESSING_STATUS_STRING    = '[3/5] Processing indexed tracks'
-    STANDARDISING_STATUS_STRING = '[4/5] Standardising track data'
-    REWRITING_STATUS_STRING     = '[5/5] Rewriting tracks'
-    
+
     warnings = []
-    
+
     # Recursively tranverse from the provided root directory looking for mp3s:
     #  * dirname gives the path to the current directory
     #  * dirnames gives the list of subdirectories in the folder
@@ -237,7 +266,7 @@ def main():
                 new_file = TrackFile.TrackFile(file_path, f.cleaned)
                 track_list.append(new_file)
     track_count = len(track_list)
-    
+
     # create storage system
     music_collection = TrackCollection.TrackCollection()
 
@@ -248,17 +277,19 @@ def main():
         music_collection.add(track_list[i])
         Progress.report(INDEXING_STATUS_STRING, track_count, i+1)
     print_warnings(warnings)
-    
+
     # Remove all duplicate files from the collection.
-    def progress_stub(total_units, done_units):
+    def progress_stub1(total_units, done_units):
+        """Stub for encapsulating the 'processing'' formatter"""
         Progress.report(PROCESSING_STATUS_STRING, total_units, done_units)
-    music_collection.remove_duplicates(warnings, progress_stub)
+    music_collection.remove_duplicates(warnings, progress_stub1)
     print_warnings(warnings)
-    
+
     # Standardise track data on the remaining files.
-    def progress_stub(total_units, done_units):
+    def progress_stub2(total_units, done_units):
+        """Stub for encapsulating the 'standardising'' formatter"""
         Progress.report(STANDARDISING_STATUS_STRING, total_units, done_units)
-    music_collection.standardise_album_tracks(warnings, progress_stub)
+    music_collection.standardise_album_tracks(warnings, progress_stub2)
     print_warnings(warnings)
 
     if args.verbose:

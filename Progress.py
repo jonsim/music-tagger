@@ -1,12 +1,18 @@
+"""Imports:
+    sys: for console output
+"""
 import sys
 
 def state(description):
+    """Prints a description with no progress"""
     sys.stdout.write("%s...\n" % (description))
 
 def skip(description):
+    """Prints a description as having been skipped"""
     sys.stdout.write("%s... SKIPPED\n" % (description))
 
 def report(description, total_units, done_units):
+    """Prints a description with its total progress"""
     if done_units == total_units:
         sys.stdout.write("%s... 100%%\n" % (description))
         #sys.stdout.write("%s... %4d/%4d\n" % (description, done_units, total_units))
