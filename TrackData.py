@@ -23,8 +23,12 @@ class TrackData(object):
 
     def __str__(self):
         """Override default str method """
-        return "%02d %s - %s by %s in %d" % (self.track, self.title, self.album,
-                                             self.artist, self.year)
+        title_str = str(self.title)
+        album_str = str(self.album)
+        artist_str = str(self.artist)
+        track_str = "%02d " % (self.track) if self.track else ""
+        year_str = " in %d" % (self.year) if self.year else ""
+        return "%s%s - %s by %s%s" % (track_str, title_str, album_str, artist_str, year_str)
 
     def __eq__(self, other):
         """Override default equality method """

@@ -3,102 +3,397 @@
 """
 import TrackData
 
+# Valid Frame IDs for each of the different versions
+_V22_FRAME_IDS = [\
+    "BUF", "CNT", "COM", "CRA", "CRM", "ETC", "EQU", "GEO", "IPL", "LNK", "MCI",
+    "MLL", "PIC", "POP", "REV", "RVA", "SLT", "STC", "TAL", "TBP", "TCM", "TCO",
+    "TCR", "TDA", "TDY", "TEN", "TFT", "TIM", "TKE", "TLA", "TLE", "TMT", "TOA",
+    "TOF", "TOL", "TOR", "TOT", "TP1", "TP2", "TP3", "TP4", "TPA", "TPB", "TRC",
+    "TRD", "TRK", "TSI", "TSS", "TT1", "TT2", "TT3", "TXT", "TXX", "TYE", "UFI",
+    "ULT", "WAF", "WAR", "WAS", "WCM", "WCP", "WPB", "WXX"]
+_V23_FRAME_IDS = [\
+    "AENC", "APIC", "COMM", "COMR", "ENCR", "EQUA", "ETCO", "GEOB", "GRID",
+    "IPLS", "LINK", "MCDI", "MLLT", "OWNE", "PRIV", "PCNT", "POPM", "POSS",
+    "RBUF", "RVAD", "RVRB", "SYLT", "SYTC", "TALB", "TBPM", "TCOM", "TCON",
+    "TCOP", "TDAT", "TDLY", "TENC", "TEXT", "TFLT", "TIME", "TIT1", "TIT2",
+    "TIT3", "TKEY", "TLAN", "TLEN", "TMED", "TOAL", "TOFN", "TOLY", "TOPE",
+    "TORY", "TOWN", "TPE1", "TPE2", "TPE3", "TPE4", "TPOS", "TPUB", "TRCK",
+    "TRDA", "TRSN", "TRSO", "TSIZ", "TSRC", "TSSE", "TYER", "TXXX", "UFID",
+    "USER", "USLT", "WCOM", "WCOP", "WOAF", "WOAR", "WOAS", "WORS", "WPAY",
+    "WPUB", "WXXX"]
+_V24_FRAME_IDS = _V23_FRAME_IDS + [\
+    "ASPI", "EQU2", "RVA2", "SEEK", "SIGN", "TDEN", "TDOR", "TDRC", "TDRL",
+    "TDTG", "TIPL", "TMCL", "TMOO", "TPRO", "TSOA", "TSOP", "TSOT", "TSST"]
+_V22_V23_FRAME_ID_MAPPINGS = {\
+    "BUF": "RBUF", "CNT": "PCNT", "COM": "COMM", "CRA": "AENC", "CRM": "ENCR",
+    "ETC": "ETCO", "EQU": "EQUA", "GEO": "GEOB", "IPL": "IPLS", "LNK": "LINK",
+    "MCI": "MCDI", "MLL": "MLLT", "PIC": "APIC", "POP": "POPM", "REV": "RVRB",
+    "RVA": "RVAD", "SLT": "SYLT", "STC": "SYTC", "TAL": "TALB", "TBP": "TBPM",
+    "TCM": "TCOM", "TCO": "TCON", "TCR": "TCOP", "TDA": "TDAT", "TDY": "TDLY",
+    "TEN": "TENC", "TFT": "TFLT", "TIM": "TIME", "TKE": "TKEY", "TLA": "TLAN",
+    "TLE": "TLEN", "TMT": "TMED", "TOA": "TOPE", "TOF": "TOFN", "TOL": "TOLY",
+    "TOR": "TORY", "TOT": "TOAL", "TP1": "TPE1", "TP2": "TPE2", "TP3": "TPE3",
+    "TP4": "TPE4", "TPA": "TPOS", "TPB": "TPUB", "TRC": "TSRC", "TRD": "TRDA",
+    "TRK": "TRCK", "TSI": "TSIZ", "TSS": "TSSE", "TT1": "TIT1", "TT2": "TIT2",
+    "TT3": "TIT3", "TXT": "TEXT", "TXX": "TXXX", "TYE": "TYER", "UFI": "UFID",
+    "ULT": "USLT", "WAF": "WOAF", "WAR": "WOAR", "WAS": "WOAS", "WCM": "WCOM",
+    "WCP": "WCOP", "WPB": "WPUB", "WXX": "WXXX"}
+_V23_V22_FRAME_ID_MAPPINGS = {\
+    "RBUF": "BUF", "PCNT": "CNT", "COMM": "COM", "AENC": "CRA", "ENCR": "CRM",
+    "ETCO": "ETC", "EQUA": "EQU", "GEOB": "GEO", "IPLS": "IPL", "LINK": "LNK",
+    "MCDI": "MCI", "MLLT": "MLL", "APIC": "PIC", "POPM": "POP", "RVRB": "REV",
+    "RVAD": "RVA", "SYLT": "SLT", "SYTC": "STC", "TALB": "TAL", "TBPM": "TBP",
+    "TCOM": "TCM", "TCON": "TCO", "TCOP": "TCR", "TDAT": "TDA", "TDLY": "TDY",
+    "TENC": "TEN", "TFLT": "TFT", "TIME": "TIM", "TKEY": "TKE", "TLAN": "TLA",
+    "TLEN": "TLE", "TMED": "TMT", "TOPE": "TOA", "TOFN": "TOF", "TOLY": "TOL",
+    "TORY": "TOR", "TOAL": "TOT", "TPE1": "TP1", "TPE2": "TP2", "TPE3": "TP3",
+    "TPE4": "TP4", "TPOS": "TPA", "TPUB": "TPB", "TSRC": "TRC", "TRDA": "TRD",
+    "TRCK": "TRK", "TSIZ": "TSI", "TSSE": "TSS", "TIT1": "TT1", "TIT2": "TT2",
+    "TIT3": "TT3", "TEXT": "TXT", "TXXX": "TXX", "TYER": "TYE", "UFID": "UFI",
+    "USLT": "ULT", "WOAF": "WAF", "WOAR": "WAR", "WOAS": "WAS", "WCOM": "WCM",
+    "WCOP": "WCP", "WPUB": "WPB", "WXXX": "WXX"}
+_EXPERIMENTAL_FRAME_ID_PREFIXS = ["X", "Y", "Z"]
 
-def _assert_header_valid(header):
-    """Asserts an ID3v2 header is well formed
 
-    Args:
-        header: byte array constituting the tag header data to check.
+def _read_32bit_syncsafe(byte_data):
+    int_bytes = [ord(b) for b in byte_data]
+    if (int_bytes[0] & 0x80) or \
+       (int_bytes[1] & 0x80) or \
+       (int_bytes[2] & 0x80) or \
+       (int_bytes[3] & 0x80):
+        raise Exception("Attempt to read an invalid 32-bit syncsafe integer")
+    return (int_bytes[0] << 21) \
+         + (int_bytes[1] << 14) \
+         + (int_bytes[2] <<  7) \
+         + (int_bytes[3])
 
-    Returns:
-        None
 
-    Raises:
-        Exception: if the header is invalid
+def _read_32bit_nonsyncsafe(byte_data):
+    int_bytes = [ord(b) for b in byte_data]
+    return (int_bytes[0] << 24) \
+         + (int_bytes[1] << 16) \
+         + (int_bytes[2] <<  8) \
+         + (int_bytes[3])
+
+
+def _read_24bit_nonsyncsafe(byte_data):
+    int_bytes = [ord(b) for b in byte_data]
+    return (int_bytes[0] << 16) \
+         + (int_bytes[1] <<  8) \
+         + (int_bytes[2])
+
+
+def _read_16bit_nonsyncsafe(byte_data):
+    int_bytes = [ord(b) for b in byte_data]
+    return (int_bytes[0] <<  8) \
+         + (int_bytes[1])
+
+
+class _TagHeader(object):
+    """ID3v2 tag header
+
+    Attributes:
+        version: int major version number (e.g. 4 for ID3v2.4.0)
+        version_minor: int minor version number (e.g. 0 for ID3v2.4.0)
+        header_size: int byte size of header data
+        body_size: int byte size of all non-header data in the tag
+        flags: dictionary mapping strings to bools for each available flag
+        extended_header_size: int byte size of this version's extended header,
+            if it has one. This attribute does not describe whether or not an
+            extended header exists, only what size it would be if it did.
+        frame_header_size: int byte size of this version's frame header size.
     """
-    # Check version: we only know at most about v2.4.0 (revisions are guaranteed
-    # to be backwards compatible, but not 0xFF).
-    version_okay = ord(header[3]) <= 0x04 and ord(header[4]) != 0xFF
-    # Check flags: bit 6 (extended tag bit) may be legitimately set. Bit 7
-    # (unsynchronised tag bit) is not currently supported. All other bits
-    # represent non-standard extensions in v2.4 or earlier and assumed to render
-    # the tag unreadable.
-    flags_okay = (ord(header[5]) & ~0x40) == 0x00
-    # Check size: size is encoded with MSB 0, all other sizes supported
-    size_okay = ord(header[6]) < 0x80 and \
-                ord(header[7]) < 0x80 and \
-                ord(header[8]) < 0x80 and \
-                ord(header[9]) < 0x80
-    # Assert all is well
-    header_okay = version_okay and flags_okay and size_okay
-    if not header_okay:
-        raise Exception("Attempting to create a new tag for a file with "
-                        "corrupted ID3v2 tag. Exitting.")
+    def __init__(self, header_data):
+        # Check we're actually looking at an ID3 tag
+        if header_data[:3] != "ID3":
+            raise Exception("Given data does not contain a tag header")
+        # Extract version number and assert it's supported
+        self.version = ord(header_data[3])
+        self.version_minor = ord(header_data[4])
+        if self.version < 2 or self.version > 4 or self.version_minor == 0xFF:
+            raise Exception("Unknown version 'ID3v2.%d.%d'" % (self.version, \
+                self.version_minor))
+        # Extract flags depending on version
+        flag_int = ord(header_data[5])
+        self.flags = {}
+        if self.version == 2:
+            self.extended_header_size = 0
+            self.frame_header_size = 6
+            self.flags['unsynchronisation'] = flag_int & 0x80
+            self.flags['compression'] = flag_int & 0x40
+            unknown_flags = flag_int & ~0xC0
+        elif self.version == 3:
+            self.extended_header_size = 10
+            self.frame_header_size = 10
+            self.flags['unsynchronisation'] = flag_int & 0x80
+            self.flags['extended_header'] = flag_int & 0x40
+            self.flags['experimental'] = flag_int & 0x20
+            unknown_flags = flag_int & ~0xE0
+        elif self.version == 4:
+            self.extended_header_size = 6
+            self.frame_header_size = 10
+            self.flags['unsynchronisation'] = flag_int & 0x80
+            self.flags['extended_header'] = flag_int & 0x40
+            self.flags['experimental'] = flag_int & 0x20
+            self.flags['footer_present'] = flag_int & 0x10
+            unknown_flags = flag_int & ~0xF0
+        # TODO: Handle unsupported flags
+        # Ensure flags are valid
+        if unknown_flags != 0:
+            raise Exception("Unknown flags '0x%02X' (should be 0)" % (unknown_flags))
+        # Extract size
+        self.header_size = 10
+        self.body_size = _read_32bit_syncsafe(header_data[6:10])
+        # Assert frame size is valid
+        if self.body_size == 0:
+            raise Exception("Invalid Tag Size '0'")
 
 
-def _calculate_tag_size(header):
-    """Calculates the size of an ID3v2.x tag
+    def __str__(self):
+        set_flags = [flag for flag in self.flags if self.flags[flag]]
+        return "ID3v2.%d.%d Size=%d %s" % (self.version, self.version_minor,
+                                           self.body_size, ','.join(set_flags))
 
-    The total tag size (as returned) is defined as the total ID3v2 tag size,
-    including the header (but not the extended header if one exists). Thus the
-    returned total_tag_size = tag_body_size + 10.
+    def has_extended_header(self):
+        if 'extended_header' in self.flags:
+            return self.flags['extended_header'] != 0
+        return False
 
-    Args:
-        header: byte array constituting the tag header data to check.
 
-    Returns:
-        The int total_tag_size
+class _TagExtendedHeader(object):
+    """ID3v2 extended tag header
+
+    Attributes:
+        version: int version of the tag this extended header relates to
+        header_size: int byte size of header data
+        body_size: int byte size of all non-header data in this section
+        flags: dictionary mapping strings to bools for each available flag
     """
-    return (ord(header[6]) << 21)   \
-         + (ord(header[7]) << 14)   \
-         + (ord(header[8]) <<  7)   \
-         + (ord(header[9]))         \
-         + 10
+    def __init__(self, version, xheader_data):
+        self.flags = {}
+        self.version = version
+        if version == 3:
+            self.header_size = 10
+            self.body_size = _read_32bit_nonsyncsafe(xheader_data[0:4])
+            flag_int = _read_16bit_nonsyncsafe(xheader_data[4:6])
+            self.flags['crc_data_present'] = flag_int & 0x8000
+            unknown_flags = flag_int & ~0x8000
+        elif version == 4:
+            self.header_size = 6
+            self.body_size = _read_32bit_syncsafe(xheader_data[0:4]) - 6
+            flag_int = ord(xheader_data[5])
+            self.flags['tag_is_an_update'] = flag_int & 0x40
+            self.flags['crc_data_present'] = flag_int & 0x20
+            self.flags['tag_restrictions'] = flag_int & 0x10
+            unknown_flags = flag_int & ~0x70
+        else:
+            raise Exception("Extended header on invalid version 'ID3v2.%d'" % (version))
+        # TODO: Handle unsupported flags
+        # Ensure flags are valid
+        if unknown_flags != 0:
+            raise Exception("Unknown flags '0x%02X' (should be 0)" % (unknown_flags))
 
 
-def _calculate_frame_size(frame):
-    """Calculates the size of a tag frame
+class _FrameHeader(object):
+    """ID3v2 tag frame
 
-    The total frame size (as returned) is defined as the total size of the
-    frame, including the header. Thus the returned
-    total_frame_size = frame_body_size + 10.
-
-    Args:
-        frame: byte array constituting the frame header data to check.
-
-    Returns:
-        The int frame_size of the frame
+    Attributes:
+        id: string id of the frame
+        version: int version of the tag this frame was read from
+        body_offset: the file offset of this frame's body
+        header_size: int byte size of header data
+        body_size: int byte size of all non-header data in the frame
+        flags: dictionary mapping strings to bools for each available flag
     """
-    return (ord(frame[4]) << 24)    \
-         + (ord(frame[5]) << 16)    \
-         + (ord(frame[6]) <<  8)    \
-         + (ord(frame[7]))          \
-         + 10
+    def __init__(self, version, header_data, offset):
+        self.flags = {}
+        self.version = version
+        self.body_offset = offset
+        # Extract header information depending on version
+        if version == 2:
+            self.id = header_data[:3]
+            self.header_size = 6
+            self.body_size = _read_24bit_nonsyncsafe(header_data[3:6])
+            unknown_flags = 0
+            valid_ids = _V22_FRAME_IDS
+        elif version == 3:
+            self.id = header_data[:4]
+            self.header_size = 10
+            self.body_size = _read_32bit_nonsyncsafe(header_data[4:8])
+            flag_int = _read_16bit_nonsyncsafe(header_data[8:10])
+            self.flags['tag_alter_preservation'] = flag_int & 0x8000
+            self.flags['file_alter_preservation'] = flag_int & 0x4000
+            self.flags['read_only'] = flag_int & 0x2000
+            self.flags['compression'] = flag_int & 0x0080
+            self.flags['encryption'] = flag_int & 0x0040
+            self.flags['grouping_identity'] = flag_int & 0x0020
+            unknown_flags = flag_int & ~0xE0E0
+            valid_ids = _V23_FRAME_IDS
+        elif version == 4:
+            self.id = header_data[:4]
+            self.header_size = 10
+            self.body_size = _read_32bit_syncsafe(header_data[4:8])
+            flag_int = _read_16bit_nonsyncsafe(header_data[8:10])
+            self.flags['tag_alter_preservation'] = flag_int & 0x4000
+            self.flags['file_alter_preservation'] = flag_int & 0x2000
+            self.flags['read_only'] = flag_int & 0x1000
+            self.flags['grouping_identity'] = flag_int & 0x0040
+            self.flags['compression'] = flag_int & 0x0008
+            self.flags['encryption'] = flag_int & 0x0004
+            self.flags['unsynchronisation'] = flag_int & 0x0002
+            self.flags['data_length_indicator'] = flag_int & 0x0001
+            unknown_flags = flag_int & ~0x704F
+            valid_ids = _V24_FRAME_IDS
+        else:
+            raise Exception("Unknown tag version 'ID3v2.%d'" % (version))
+        # Assert frame id is known
+        if not (self.id[0] in _EXPERIMENTAL_FRAME_ID_PREFIXS or self.id in valid_ids):
+            if version == 3 and self.id[:3] in _V22_FRAME_IDS:
+                # Some archaeic players (iTunes 6.0 in particular) write out
+                # v2.3 tags but using v2.2 Frame IDs. Completely against the
+                # standard but this affects enough files it's worth addressing...
+                self.id = _V22_V23_FRAME_ID_MAPPINGS[self.id[:3]]
+                # TODO: Warning?
+            else:
+                raise Exception("Unknown ID3v2.%d Frame ID '%s'" % (self.version, self.id))
+        # Assert frame size is valid
+        # TODO: Handle this properly
+        if self.body_size == 0:
+            #raise Exception("Invalid ID3v2.%d Frame Size '0'" % (self.version))
+            print "WARNING: Empty frame found. Technically illegal"
+        # TODO: Handle unsupported flags
+        # Ensure flags are valid
+        if unknown_flags != 0:
+            raise Exception("Unknown ID3v2.%d Flags '0x%04X' (should be 0)" % (self.version, unknown_flags))
+
+    def __str__(self):
+        set_flags = [flag for flag in self.flags if self.flags[flag]]
+        return "%s Size=%d %s" % (self.id, self.body_size, ','.join(set_flags))
+
+    def read_body(self, file_handle):
+        file_handle.seek(self.body_offset, 0)
+        return file_handle.read(self.body_size)
 
 
-def _tag_header_to_string(header):
-    tag_id = header[:3]
-    version = "ID3v2.%d.%d" % (ord(header[3]), ord(header[4]))
-    tag_size = _calculate_tag_size(header)
-    flags = []
-    if ord(header[5]) & 0x80: flags.append("unsynchronisation")
-    if ord(header[5]) & 0x40: flags.append("extended_header")
-    if ord(header[5]) & 0x20: flags.append("experimental")
-    flags_str = '' if not flags else ' ' + ','.join(flags)
-    return "%s %s Size=%d%s" % (tag_id, version, tag_size, flags_str)
+class _Tag(object):
+    def __init__(self, file_handle):
+        file_handle.seek(0, 0)
+        # Read header
+        header_data = file_handle.read(10)
+        self.header = _TagHeader(header_data)
+        print str(self.header)
+        total_size = self.header.header_size + self.header.body_size
+        # Read extended header (if applicable)
+        if self.header.has_extended_header():
+            xheader_data = file_handle.read(self.header.extended_header_size)
+            self.extended_header = _TagExtendedHeader(self.header.version, xheader_data)
+            print '  ' + str(self.extended_header)
+            file_handle.seek(self.extended_header.body_size, 1)
+        else:
+            self.extended_header = None
+        # Read frames
+        self.frames = []
+        while file_handle.tell() < total_size:
+            fheader_data = file_handle.read(self.header.frame_header_size)
+            if fheader_data[0] == '\0':
+                # If we have read a null byte we have reached the end of the
+                # tag. It turns out the majority of ID3 tags are heavily padded
+                # and are actually significantly longer than necessary so
+                # editors can modify without having to rewrite the entire MP3
+                # file. This is poorly documented.
+                # The ID3 tags I have tested are typically between 500 and 1000
+                # bytes while actual allocation is around 4200 bytes per tag.
+                break
+            frame = _FrameHeader(self.header.version, fheader_data, file_handle.tell())
+            print '    ' + str(frame)
+            self.frames.append(frame)
+            file_handle.seek(frame.body_size, 1)
 
-def _frame_header_to_string(frame):
-    frame_id = frame[:4]
-    frame_size = _calculate_frame_size(frame) - 10
-    flags = []
-    if ord(frame[8]) & 0x80: flags.append("tag_alter_preservation")
-    if ord(frame[8]) & 0x40: flags.append("file_alter_preservation")
-    if ord(frame[8]) & 0x20: flags.append("read_only")
-    if ord(frame[9]) & 0x80: flags.append("compression")
-    if ord(frame[9]) & 0x40: flags.append("encryption")
-    if ord(frame[9]) & 0x20: flags.append("group_id")
-    flags_str = '' if not flags else ' ' + ','.join(flags)
-    return "%s Size=%d%s" % (frame_id, frame_size, flags_str)
+    def _get_frame(self, frame_id):
+        for frame in self.frames:
+            if frame.id == frame_id:
+                return frame
+        return None
+
+    def get_artist(self, file_handle):
+        version = self.header.version
+        if version == 2:
+            frame_id = "TP1"
+        elif version == 3 or version == 4:
+            frame_id = "TPE1"
+        else:
+            return None
+        frame = self._get_frame(frame_id)
+        if frame:
+            return _read_frame_text(frame.read_body(file_handle))
+        return None
+
+    def get_album(self, file_handle):
+        version = self.header.version
+        if version == 2:
+            frame_id = "TAL"
+        elif version == 3 or version == 4:
+            frame_id = "TALB"
+        else:
+            return None
+        frame = self._get_frame(frame_id)
+        if frame:
+            return _read_frame_text(frame.read_body(file_handle))
+        return None
+
+    def get_title(self, file_handle):
+        version = self.header.version
+        if version == 2:
+            frame_id = "TT2"
+        elif version == 3 or version == 4:
+            frame_id = "TIT2"
+        else:
+            return None
+        frame = self._get_frame(frame_id)
+        if frame:
+            return _read_frame_text(frame.read_body(file_handle))
+        return None
+
+    def get_track(self, file_handle):
+        version = self.header.version
+        if version == 2:
+            frame_id = "TRK"
+        elif version == 3 or version == 4:
+            frame_id = "TRCK"
+        else:
+            return None
+        frame = self._get_frame(frame_id)
+        if frame:
+            body_data = _read_frame_text(frame.read_body(file_handle))
+            return TrackData.mint(body_data.split('/')[0])
+        return None
+
+    def get_year(self, file_handle):
+        version = self.header.version
+        if version == 2:
+            frame_id = "TYE"
+        elif version == 3 or version == 4:
+            frame_id = "TYER"
+        else:
+            return None
+        frame = self._get_frame(frame_id)
+        if frame:
+            body_data = _read_frame_text(frame.read_body(file_handle))
+            return TrackData.mint(body_data[0:4])
+        return None
+
+def _read_frame_text(body_data):
+    encoding = ord(body_data[0])
+    # TODO: Deal with unicode properly (not using encode('ascii', 'replace'))
+    if encoding == 0:   # ISO-8859-1
+        return body_data[1:].decode('iso-8859-1').encode('ascii', 'replace')
+    elif encoding == 1: # UTF-16
+        return body_data[1:].decode('utf_16').encode('ascii', 'replace')
+    elif encoding == 2: # UTF-16BE
+        return body_data[1:].decode('utf_16_be').encode('ascii', 'replace')
+    elif encoding == 3: # UTF-8
+        return body_data[1:].decode('utf_8').encode('ascii', 'replace')
+    return body_data
 
 
 def calculate_tag_size(file_handle):
@@ -117,10 +412,8 @@ def calculate_tag_size(file_handle):
     file_handle.seek(cursor_pos, 0)
     # Calculate tag size
     if tag_header[:3] == "ID3":
-        # check its not messed up
-        _assert_header_valid(tag_header)
-        # Parse the tag header.
-        return _calculate_tag_size(tag_header)
+        tag = _TagHeader(tag_header)
+        return tag.header_size + tag.body_size
     return 0
 
 
@@ -139,56 +432,21 @@ def read_tag_data(file_path):
     """
     data = TrackData.TrackData()
     with open(file_path, "rb", 0) as f:
-        header_data = f.read(10)
-
-        # see what juicy goodies we have
-        if header_data[:3] == "ID3":
-            # check its not messed up
-            _assert_header_valid(header_data)
-            # Parse the tag header.
-            total_tag_size = _calculate_tag_size(header_data)
-            print file_path
-            print _tag_header_to_string(header_data)
-
-            # Read the frames
-            total_read_size = 10
-            # TODO: We don't deal with extended headers at all and will read
-            # them as frames
-            while total_read_size < total_tag_size:
-                # Parse the frame header.
-                f.seek(total_read_size, 0)
-                frame_header_data = f.read(10)
-                if frame_header_data[0] == '\00':
-                    # If we have read a null byte we have reached the end of the
-                    # ID3 tag. It turns out the majority of ID3 tags are heavily
-                    # padded and are actually significantly longer than it needs
-                    # to be so that editors can modify it without having to
-                    # rewrite the entire MP3 file. This is poorly documented
-                    # and, to me, really arcane - tags should not be frequently
-                    # rewritten and being able to rewrite in-place seems a
-                    # marginal optimisation at best. The ID3 tags I have tested
-                    # are typically between 500 and 1000 bytes while actual
-                    # allocation is around 4200 bytes per tag.
-                    break
-                frame_id = frame_header_data[0:4]
-                total_frame_size = _calculate_frame_size(frame_header_data)
-                print '  %s cum=%d' % (_frame_header_to_string(frame_header_data), \
-                                       total_read_size + total_frame_size)
-                frame_body = f.read(total_frame_size - 10)
-                total_read_size += total_frame_size
-                # Collect frame info
-                if   frame_id == "TALB":
-                    data.album = frame_body[1:]
-                elif frame_id == "TIT2":
-                    data.title = frame_body[1:]
-                elif frame_id == "TPE1":
-                    data.artist = frame_body[1:]
-                elif frame_id == "TRCK":
-                    data.track = TrackData.mint(frame_body[1:].split('/')[0])
-                elif frame_id == "TYER":
-                    data.year = TrackData.mint(frame_body[1:5])
-            # clean the strings generated
-            data.clean(False) # TODO: This was previously True - correct?
+        has_tag = f.read(3) == "ID3"
+        # If we don't have a tag, drop out
+        if not has_tag:
+            return data
+        # Parse the tag
+        print file_path
+        tag = _Tag(f)
+        # Collect frame info
+        data.artist = tag.get_artist(f)
+        data.album = tag.get_album(f)
+        data.title = tag.get_title(f)
+        data.track = tag.get_track(f)
+        data.year = tag.get_year(f)
+        # clean the strings generated
+        data.clean(False) # TODO: This was previously True - correct?
     return data
 
 
@@ -240,10 +498,9 @@ def create_tag_string(data, file_path):
     had_id3v2_tag = False
     if track_data[:3] == "ID3":
         had_id3v2_tag = True
-        # check its not messed up
-        _assert_header_valid(track_data)
         # Parse the tag header.
-        total_tag_size = _calculate_tag_size(track_data)
+        tag = _TagHeader(track_data)
+        total_tag_size = tag.header_size + tag.body_size
         tag_data = track_data[:total_tag_size]
 
     # create a new tag and add our data to it
@@ -263,13 +520,14 @@ def create_tag_string(data, file_path):
     # which will have taken some time to generate/collect, e.g. the POPM tag
     # (though this is far from a standard itself).
     if had_id3v2_tag:
+        # TODO: This is going to screw up with id3v2.2 tags
         total_read_size = 10
         while total_read_size < total_tag_size:
             if tag_data[total_read_size] == '\00':
                 break
             frame_data = tag_data[total_read_size:total_read_size+10]
             frame_id = frame_data[0:4]
-            total_frame_size = _calculate_frame_size(frame_data)
+            total_frame_size = _read_32bit_syncsafe(frame_data[4:8]) + 10
             # TODO: This if statement could be extended to include other frames
             # to be left out, or even replaced with just PRIV frames (UFID and
             # POPM should probably also be kept as they contain information
