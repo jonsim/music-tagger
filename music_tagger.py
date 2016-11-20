@@ -77,7 +77,7 @@ def create_new_file(write_mode, music_file, output_file_path):
         raise Exception("write_id3_v1_tag called and instructed to write over "
                         "the file, however write mode (-f) is not enabled.")
     track_data = extract_track_data(music_file.file_path)
-    id3v1_tag = create_id3v1_tag(music_file)
+    id3v1_tag = ID3v1.create_tag_string(music_file)
     id3v2_tag = create_id3v2_tag(music_file)
     with open(output_file_path, "wb") as f:
         f.write(id3v2_tag + track_data + id3v1_tag)

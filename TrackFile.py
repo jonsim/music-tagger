@@ -1,14 +1,14 @@
 """Imports:
     Levenshtein: calculating string similarity
     TrackData: data about each file
-    ID3v1Parser: parsing ID3v1 tag data from the file
-    ID3v2Parser: parsing ID3v2 tag data from the file
+    ID3v1: parsing ID3v1 tag data from the file
+    ID3v2: parsing ID3v2 tag data from the file
     FilePathParser: parsing path data from the file
 """
 import Levenshtein
 import TrackData
-import ID3v1Parser
-import ID3v2Parser
+import ID3v1
+import ID3v2
 import FilePathParser
 
 class TrackFile(object):
@@ -76,8 +76,8 @@ class TrackFile(object):
             None
         """
         self.fp = FilePathParser.read_file_path_data(self.file_path, self.cleaned_filename)
-        self.v1 = ID3v1Parser.read_id3v1_tag_data(self.file_path)
-        self.v2 = ID3v2Parser.read_id3v2_tag_data(self.file_path)
+        self.v1 = ID3v1.read_tag_data(self.file_path)
+        self.v2 = ID3v2.read_tag_data(self.file_path)
 
 
     def finalise_data(self):

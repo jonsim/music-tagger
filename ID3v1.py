@@ -39,7 +39,24 @@ def pack_null_bytes(string, length):
     return data
 
 
-def read_id3v1_tag_data(file_path):
+def has_tag(file_handle):
+    """Determines whether or not an opened file handle has an ID3v1 tag
+
+    Args:
+        file_handle: a file handle opened at least as "rb"
+
+    Returns:
+        Boolean state determining the existance
+    """
+    cursor_pos = file_handle.tell()
+    file_handle.seek(-128, 2)
+    tag_data = file_handle.read(3)
+    tag_header_present = tag_data == "TAG"
+    file_handle.seek(cursor_pos, 0)
+    return tag_header_present
+
+
+def read_tag_data(file_path):
     """Reads the ID3v1 tag data from a file (if present).
 
     ID3 v1.0 and v1.1 tags are supported along with extended tags.
@@ -89,7 +106,7 @@ def read_id3v1_tag_data(file_path):
     return data
 
 
-def create_id3v1_tag_string(data):
+def create_tag_string(data):
     """ Converts the given TrackData into a ID3v1.1 tag.
 
     Args:

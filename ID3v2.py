@@ -3,7 +3,93 @@
 """
 import TrackData
 
-def read_id3v2_tag_data(file_path):
+
+def assert_header_valid(header):
+    """Asserts an ID3v2 header is well formed
+
+    Args:
+        header: byte array constituting the tag header data to check.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: if the header is invalid
+    """
+    # Check version: we only know at most about v2.4.0 (revisions are guaranteed
+    # to be backwards compatible, but not 0xFF).
+    version_okay = ord(header[3]) <= 0x04 and ord(header[4]) != 0xFF
+    # Check flags: bit 6 (extended tag bit) may be legitimately set. Bit 7
+    # (unsynchronised tag bit) is not currently supported. All other bits
+    # represent non-standard extensions in v2.4 or earlier and assumed to render
+    # the tag unreadable.
+    flags_okay = (ord(header[5]) & ~0x40) == 0x00
+    # Check size: size is encoded with MSB 0, all other sizes supported
+    size_okay = ord(header[6]) < 0x80 and \
+                ord(header[7]) < 0x80 and \
+                ord(header[8]) < 0x80 and \
+                ord(header[9]) < 0x80
+    # Assert all is well
+    header_okay = version_okay and flags_okay and size_okay
+    if not header_okay:
+        raise Exception("Attempting to create a new tag for a file with "
+                        "corrupted ID3v2 tag. Exitting.")
+
+
+def calculate_tag_size(header):
+    """Calculates the size of an ID3v2.x tag
+
+    The tag size (as returned) is defined as the complete ID3v2 tag size, minus
+    the header (but not the extended header if one exists). Thus the returned
+    tag_size = total_tag_size - 10.
+
+    Args:
+        header: byte array constituting the tag header data to check.
+
+    Returns:
+        The int tag_size of the tag
+    """
+    return (ord(header[6]) << 21) \
+         + (ord(header[7]) << 14) \
+         + (ord(header[8]) <<  7) \
+         + (ord(header[9]))
+
+
+def calculate_frame_size(frame):
+    """Calculates the size of a tag frame
+
+    The frame size (as returned) is defined as the complete size of the frame,
+    minus the header. Thus the returned frame_size = total_frame_size - 10.
+
+    Args:
+        frame: byte array constituting the frame header data to check.
+
+    Returns:
+        The int frame_size of the frame
+    """
+    return (ord(frame[4]) << 24) \
+         + (ord(frame[5]) << 16) \
+         + (ord(frame[6]) <<  8) \
+         + (ord(frame[7]))
+
+
+def has_tag(file_handle):
+    """Determines whether or not an opened file handle has an ID3v2 tag
+
+    Args:
+        file_handle: a file handle opened at least as "rb"
+
+    Returns:
+        Boolean state determining the existance
+    """
+    cursor_pos = file_handle.tell()
+    file_handle.seek(0, 0)
+    tag_data = file_handle.read(3)
+    tag_header_present = tag_data == "ID3"
+    file_handle.seek(cursor_pos, 0)
+    return tag_header_present
+
+def read_tag_data(file_path):
     """Reads the ID3v2 tag data from a file (if present).
 
     ID3 v2.2.x, 2.3.x and 2.4.x tags are all supported.
@@ -65,7 +151,7 @@ def read_id3v2_tag_data(file_path):
     return data
 
 
-def create_id3v2_tag_string(data, file_path):
+def create_tag_string(data, file_path):
     """Converts the given TrackData into a ID3v2.3.0 tag.
 
     Args:
@@ -179,72 +265,3 @@ def create_id3v2_tag_string(data, file_path):
     new_header += size_string
 
     return new_header + new_frames
-
-
-def assert_header_valid(header):
-    """Asserts an ID3v2 header is well formed
-
-    Args:
-        header: byte array constituting the tag header data to check.
-
-    Returns:
-        None
-
-    Raises:
-        Exception: if the header is invalid
-    """
-    # Check version: we only know at most about v2.4.0 (revisions are guaranteed
-    # to be backwards compatible, but not 0xFF).
-    version_okay = ord(header[3]) <= 0x04 and ord(header[4]) != 0xFF
-    # Check flags: bit 6 (extended tag bit) may be legitimately set. Bit 7
-    # (unsynchronised tag bit) is not currently supported. All other bits
-    # represent non-standard extensions in v2.4 or earlier and assumed to render
-    # the tag unreadable.
-    flags_okay = (ord(header[5]) & ~0x40) == 0x00
-    # Check size: size is encoded with MSB 0, all other sizes supported
-    size_okay = ord(header[6]) < 0x80 and \
-                ord(header[7]) < 0x80 and \
-                ord(header[8]) < 0x80 and \
-                ord(header[9]) < 0x80
-    # Assert all is well
-    header_okay = version_okay and flags_okay and size_okay
-    if not header_okay:
-        raise Exception("Attempting to create a new tag for a file with "
-                        "corrupted ID3v2 tag. Exitting.")
-
-
-def calculate_tag_size(header):
-    """Calculates the size of an ID3v2.x tag
-
-    The tag size (as returned) is defined as the complete ID3v2 tag size, minus
-    the header (but not the extended header if one exists). Thus the returned
-    tag_size = total_tag_size - 10.
-
-    Args:
-        header: byte array constituting the tag header data to check.
-
-    Returns:
-        The int tag_size of the tag
-    """
-    return (ord(header[6]) << 21) \
-         + (ord(header[7]) << 14) \
-         + (ord(header[8]) <<  7) \
-         + (ord(header[9]))
-
-
-def calculate_frame_size(frame):
-    """Calculates the size of a tag frame
-
-    The frame size (as returned) is defined as the complete size of the frame,
-    minus the header. Thus the returned frame_size = total_frame_size - 10.
-
-    Args:
-        frame: byte array constituting the frame header data to check.
-
-    Returns:
-        The int frame_size of the frame
-    """
-    return (ord(frame[4]) << 24) \
-         + (ord(frame[5]) << 16) \
-         + (ord(frame[6]) <<  8) \
-         + (ord(frame[7]))
