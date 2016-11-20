@@ -76,6 +76,31 @@ def _calculate_frame_size(frame):
          + 10
 
 
+def _tag_header_to_string(header):
+    tag_id = header[:3]
+    version = "ID3v2.%d.%d" % (ord(header[3]), ord(header[4]))
+    tag_size = _calculate_tag_size(header)
+    flags = []
+    if ord(header[5]) & 0x80: flags.append("unsynchronisation")
+    if ord(header[5]) & 0x40: flags.append("extended_header")
+    if ord(header[5]) & 0x20: flags.append("experimental")
+    flags_str = '' if not flags else ' ' + ','.join(flags)
+    return "%s %s Size=%d%s" % (tag_id, version, tag_size, flags_str)
+
+def _frame_header_to_string(frame):
+    frame_id = frame[:4]
+    frame_size = _calculate_frame_size(frame) - 10
+    flags = []
+    if ord(frame[8]) & 0x80: flags.append("tag_alter_preservation")
+    if ord(frame[8]) & 0x40: flags.append("file_alter_preservation")
+    if ord(frame[8]) & 0x20: flags.append("read_only")
+    if ord(frame[9]) & 0x80: flags.append("compression")
+    if ord(frame[9]) & 0x40: flags.append("encryption")
+    if ord(frame[9]) & 0x20: flags.append("group_id")
+    flags_str = '' if not flags else ' ' + ','.join(flags)
+    return "%s Size=%d%s" % (frame_id, frame_size, flags_str)
+
+
 def calculate_tag_size(file_handle):
     """Calculates the size of an ID3v2.x tag
 
@@ -122,9 +147,13 @@ def read_tag_data(file_path):
             _assert_header_valid(header_data)
             # Parse the tag header.
             total_tag_size = _calculate_tag_size(header_data)
+            print file_path
+            print _tag_header_to_string(header_data)
 
             # Read the frames
             total_read_size = 10
+            # TODO: We don't deal with extended headers at all and will read
+            # them as frames
             while total_read_size < total_tag_size:
                 # Parse the frame header.
                 f.seek(total_read_size, 0)
@@ -143,6 +172,8 @@ def read_tag_data(file_path):
                     break
                 frame_id = frame_header_data[0:4]
                 total_frame_size = _calculate_frame_size(frame_header_data)
+                print '  %s cum=%d' % (_frame_header_to_string(frame_header_data), \
+                                       total_read_size + total_frame_size)
                 frame_body = f.read(total_frame_size - 10)
                 total_read_size += total_frame_size
                 # Collect frame info
