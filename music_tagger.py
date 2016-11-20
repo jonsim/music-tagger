@@ -69,46 +69,6 @@ STANDARDISING_STATUS_STRING = '[4/5] Standardising track data'
 REWRITING_STATUS_STRING = '[5/5] Rewriting tracks'
 
 
-#-----------------------------------------------------------------------#
-#--------------------    FILE HANDLING FUNCTIONS    --------------------#
-#-----------------------------------------------------------------------#
-def create_new_file(write_mode, music_file, output_file_path):
-    if music_file.file_path == output_file_path and not write_mode:
-        raise Exception("write_id3_v1_tag called and instructed to write over "
-                        "the file, however write mode (-f) is not enabled.")
-    track_data = extract_track_data(music_file.file_path)
-    id3v1_tag = ID3v1.create_tag_string(music_file)
-    id3v2_tag = create_id3v2_tag(music_file)
-    with open(output_file_path, "wb") as f:
-        f.write(id3v2_tag + track_data + id3v1_tag)
-
-
-def extract_track_data(file_path):
-    # read the entire input file in.
-    with open(file_path, "rb") as f:
-        track_data = f.read()
-
-    # check if we have an id3v2 tag and strip it from the track data.
-    if track_data[:3] == "ID3":
-        # check its not messed up
-        if ord(track_data[3]) == 0xFF or ord(track_data[4]) == 0xFF or ord(track_data[6]) >= 0x80 or ord(track_data[7]) >= 0x80 or ord(track_data[8]) >= 0x80 or ord(track_data[9]) >= 0x80:
-            raise Exception("write_id3_v2_tag called on a file with a corrupted id3v2 tag. Exitting.")
-        # Collect the tag header info. The tag_size is the complete ID3v2 tag size, minus the 
-        # header (but not the extended header if one exists). Thus tag_size = total_tag_size - 10.
-        tag_size = (ord(track_data[6]) << 21) + (ord(track_data[7]) << 14) + (ord(track_data[8]) << 7) + (ord(track_data[9]))
-        track_data = track_data[tag_size+10:]
-
-    # check if we have an id3v1 tag and strip it from the track data.
-    if track_data[-128:-125] == "TAG":                      # check for v1.0/v1.1
-        if track_data[-(128+227):-(128+227-4)] == "TAG+":   # check for v1.0 extended
-            track_data = track_data[:-(128+227)]
-        else:
-            track_data = track_data[:-128]
-
-    # return what's left
-    return track_data
-
-
 
 #-----------------------------------------------------------------------#
 #-------------------    STRING HANDLING FUNCTIONS    -------------------#

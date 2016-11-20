@@ -4,7 +4,7 @@
 import TrackData
 
 
-def strip_null_bytes(data):
+def _strip_null_bytes(data):
     """Strips extraneous whitespace and null bytes from data to give a string.
 
     Args:
@@ -16,7 +16,7 @@ def strip_null_bytes(data):
     return data.replace("\00", "").strip()
 
 
-def pack_null_bytes(string, length):
+def _pack_null_bytes(string, length):
     """Packs a string into a given number of bytes and null terminates it.
 
     This is achieved either by truncating (when too long) or adding null bytes
@@ -39,21 +39,28 @@ def pack_null_bytes(string, length):
     return data
 
 
-def has_tag(file_handle):
-    """Determines whether or not an opened file handle has an ID3v1 tag
+def calculate_tag_size(file_handle):
+    """Calculates the size of an ID3v1 tag
 
     Args:
-        file_handle: a file handle opened at least as "rb"
+        file_handle: a file handle opened in a readable binary mode
 
     Returns:
-        Boolean state determining the existance
+        int number of bytes in the tag, or 0 if the file does not have one
     """
+    # Read the standard and extended tag headers
     cursor_pos = file_handle.tell()
+    file_handle.seek(-(128+227), 2)
+    tagx_header = file_handle.read(4)
     file_handle.seek(-128, 2)
-    tag_data = file_handle.read(3)
-    tag_header_present = tag_data == "TAG"
+    tag_header = file_handle.read(3)
     file_handle.seek(cursor_pos, 0)
-    return tag_header_present
+    # Calculate tag size
+    if tag_header == "TAG":
+        if tagx_header == "TAG+":
+            return 128+227
+        return 128
+    return 0
 
 
 def read_tag_data(file_path):
@@ -81,12 +88,12 @@ def read_tag_data(file_path):
         # See what juicy goodies we have.
         if tag_data[:3] == "TAG":
             # Either id3 v1.0 or v1.1
-            data.title = strip_null_bytes(tag_data[3:33])
-            data.artist = strip_null_bytes(tag_data[33:63])
-            data.album = strip_null_bytes(tag_data[63:93])
+            data.title = _strip_null_bytes(tag_data[3:33])
+            data.artist = _strip_null_bytes(tag_data[33:63])
+            data.album = _strip_null_bytes(tag_data[63:93])
             data.year = None
             if tag_data[93:97] != "\00\00\00\00":
-                data.year = TrackData.mint(strip_null_bytes(tag_data[93:97]))
+                data.year = TrackData.mint(_strip_null_bytes(tag_data[93:97]))
             data.genre = ord(tag_data[127])
             if ord(tag_data[125]) == 0 and ord(tag_data[126]) != 0:
                 # id3 v1.1
@@ -98,9 +105,9 @@ def read_tag_data(file_path):
                 data.track = None
             # check for extended tag and, if found, append to the data.
             if tagx_data[:4] == "TAG+":
-                data.title += strip_null_bytes(tagx_data[4:64])
-                data.artist += strip_null_bytes(tagx_data[64:124])
-                data.album += strip_null_bytes(tagx_data[124:184])
+                data.title += _strip_null_bytes(tagx_data[4:64])
+                data.artist += _strip_null_bytes(tagx_data[64:124])
+                data.album += _strip_null_bytes(tagx_data[124:184])
             # clean the strings generated
             data.clean(False) # TODO: This was originally True - correct?
     return data
@@ -121,13 +128,13 @@ def create_tag_string(data):
         year_string = '\00' * 4
     # 3 B header, 30 B title, 30 B artist, 30 B album, 4 B year string,
     # 28 B comment, zero-byte (signifying v1.1), 1 B track, 1 B genre
-    new_tag = "TAG"                            \
-            + pack_null_bytes(data.title, 30)  \
-            + pack_null_bytes(data.artist, 30) \
-            + pack_null_bytes(data.album, 30)  \
-            + year_string                      \
-            + '\00' * 28                       \
-            + '\00'                            \
-            + chr(data.track)                  \
+    new_tag = "TAG"                             \
+            + _pack_null_bytes(data.title, 30)  \
+            + _pack_null_bytes(data.artist, 30) \
+            + _pack_null_bytes(data.album, 30)  \
+            + year_string                       \
+            + '\00' * 28                        \
+            + '\00'                             \
+            + chr(data.track)                   \
             + chr(data.genre)
     return new_tag

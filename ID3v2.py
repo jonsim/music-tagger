@@ -4,7 +4,7 @@
 import TrackData
 
 
-def assert_header_valid(header):
+def _assert_header_valid(header):
     """Asserts an ID3v2 header is well formed
 
     Args:
@@ -36,30 +36,32 @@ def assert_header_valid(header):
                         "corrupted ID3v2 tag. Exitting.")
 
 
-def calculate_tag_size(header):
+def _calculate_tag_size(header):
     """Calculates the size of an ID3v2.x tag
 
-    The tag size (as returned) is defined as the complete ID3v2 tag size, minus
-    the header (but not the extended header if one exists). Thus the returned
-    tag_size = total_tag_size - 10.
+    The total tag size (as returned) is defined as the total ID3v2 tag size,
+    including the header (but not the extended header if one exists). Thus the
+    returned total_tag_size = tag_body_size + 10.
 
     Args:
         header: byte array constituting the tag header data to check.
 
     Returns:
-        The int tag_size of the tag
+        The int total_tag_size
     """
-    return (ord(header[6]) << 21) \
-         + (ord(header[7]) << 14) \
-         + (ord(header[8]) <<  7) \
-         + (ord(header[9]))
+    return (ord(header[6]) << 21)   \
+         + (ord(header[7]) << 14)   \
+         + (ord(header[8]) <<  7)   \
+         + (ord(header[9]))         \
+         + 10
 
 
-def calculate_frame_size(frame):
+def _calculate_frame_size(frame):
     """Calculates the size of a tag frame
 
-    The frame size (as returned) is defined as the complete size of the frame,
-    minus the header. Thus the returned frame_size = total_frame_size - 10.
+    The total frame size (as returned) is defined as the total size of the
+    frame, including the header. Thus the returned
+    total_frame_size = frame_body_size + 10.
 
     Args:
         frame: byte array constituting the frame header data to check.
@@ -67,27 +69,35 @@ def calculate_frame_size(frame):
     Returns:
         The int frame_size of the frame
     """
-    return (ord(frame[4]) << 24) \
-         + (ord(frame[5]) << 16) \
-         + (ord(frame[6]) <<  8) \
-         + (ord(frame[7]))
+    return (ord(frame[4]) << 24)    \
+         + (ord(frame[5]) << 16)    \
+         + (ord(frame[6]) <<  8)    \
+         + (ord(frame[7]))          \
+         + 10
 
 
-def has_tag(file_handle):
-    """Determines whether or not an opened file handle has an ID3v2 tag
+def calculate_tag_size(file_handle):
+    """Calculates the size of an ID3v2.x tag
 
     Args:
-        file_handle: a file handle opened at least as "rb"
+        file_handle: a file handle opened in a readable binary mode
 
     Returns:
-        Boolean state determining the existance
+        int number of bytes in the tag, or 0 if the file does not have one
     """
+    # Read the standard and extended tag headers
     cursor_pos = file_handle.tell()
     file_handle.seek(0, 0)
-    tag_data = file_handle.read(3)
-    tag_header_present = tag_data == "ID3"
+    tag_header = file_handle.read(10)
     file_handle.seek(cursor_pos, 0)
-    return tag_header_present
+    # Calculate tag size
+    if tag_header[:3] == "ID3":
+        # check its not messed up
+        _assert_header_valid(tag_header)
+        # Parse the tag header.
+        return _calculate_tag_size(tag_header)
+    return 0
+
 
 def read_tag_data(file_path):
     """Reads the ID3v2 tag data from a file (if present).
@@ -109,15 +119,14 @@ def read_tag_data(file_path):
         # see what juicy goodies we have
         if header_data[:3] == "ID3":
             # check its not messed up
-            assert_header_valid(header_data)
-            # Parse the tag header. tag_size = total_tag_size - 10.
-            tag_size = calculate_tag_size(header_data)
-            total_tag_size = tag_size + 10
+            _assert_header_valid(header_data)
+            # Parse the tag header.
+            total_tag_size = _calculate_tag_size(header_data)
 
             # Read the frames
             total_read_size = 10
             while total_read_size < total_tag_size:
-                # Parse the frame header. frame_size = total_frame_size - 10.
+                # Parse the frame header.
                 f.seek(total_read_size, 0)
                 frame_header_data = f.read(10)
                 if frame_header_data[0] == '\00':
@@ -133,19 +142,20 @@ def read_tag_data(file_path):
                     # allocation is around 4200 bytes per tag.
                     break
                 frame_id = frame_header_data[0:4]
-                frame_size = calculate_frame_size(frame_header_data)
-                total_read_size += 10 + frame_size
+                total_frame_size = _calculate_frame_size(frame_header_data)
+                frame_body = f.read(total_frame_size - 10)
+                total_read_size += total_frame_size
                 # Collect frame info
                 if   frame_id == "TALB":
-                    data.album = f.read(frame_size)[1:]
+                    data.album = frame_body[1:]
                 elif frame_id == "TIT2":
-                    data.title = f.read(frame_size)[1:]
+                    data.title = frame_body[1:]
                 elif frame_id == "TPE1":
-                    data.artist = f.read(frame_size)[1:]
+                    data.artist = frame_body[1:]
                 elif frame_id == "TRCK":
-                    data.track = TrackData.mint(f.read(frame_size)[1:].split('/')[0])
+                    data.track = TrackData.mint(frame_body[1:].split('/')[0])
                 elif frame_id == "TYER":
-                    data.year = TrackData.mint(f.read(frame_size)[1:5])
+                    data.year = TrackData.mint(frame_body[1:5])
             # clean the strings generated
             data.clean(False) # TODO: This was previously True - correct?
     return data
@@ -200,10 +210,9 @@ def create_tag_string(data, file_path):
     if track_data[:3] == "ID3":
         had_id3v2_tag = True
         # check its not messed up
-        assert_header_valid(track_data)
-        # Parse the tag header. tag_size = total_tag_size - 10.
-        tag_size = calculate_tag_size(track_data)
-        total_tag_size = tag_size + 10
+        _assert_header_valid(track_data)
+        # Parse the tag header.
+        total_tag_size = _calculate_tag_size(track_data)
         tag_data = track_data[:total_tag_size]
 
     # create a new tag and add our data to it
@@ -224,13 +233,12 @@ def create_tag_string(data, file_path):
     # (though this is far from a standard itself).
     if had_id3v2_tag:
         total_read_size = 10
-        while total_read_size < tag_size+10:
+        while total_read_size < total_tag_size:
             if tag_data[total_read_size] == '\00':
                 break
             frame_data = tag_data[total_read_size:total_read_size+10]
             frame_id = frame_data[0:4]
-            frame_size = calculate_frame_size(frame_data)
-            total_frame_size = frame_size + 10
+            total_frame_size = _calculate_frame_size(frame_data)
             # TODO: This if statement could be extended to include other frames
             # to be left out, or even replaced with just PRIV frames (UFID and
             # POPM should probably also be kept as they contain information

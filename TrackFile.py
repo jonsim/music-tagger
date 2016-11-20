@@ -173,3 +173,39 @@ class TrackFile(object):
         self.final = final
         self.finalised = True
 
+
+    def save(self, output_file_path):
+        """Saves this file to an output location
+
+        Args:
+            output_file_path: string path to the output location. May be the
+                same location as the file to overwrite.
+
+        Returns:
+            None
+        """
+        def extract_track_data(file_path):
+            """Returns the actual MP3 data from a file, without tags
+
+            Args:
+                file_path: string path to the music file.
+
+            Returns:
+                A byte array of the track MP3 data
+            """
+            with open(file_path, "rb") as f:
+                v1_tag_size = ID3v1.calculate_tag_size(f)
+                v2_tag_size = ID3v2.calculate_tag_size(f)
+                track_data = f.read()
+                if v2_tag_size > 0:
+                    track_data = track_data[v1_tag_size:-v2_tag_size]
+                else:
+                    track_data = track_data[v1_tag_size:]
+                return track_data
+        track_data = extract_track_data(self.file_path)
+        id3v1_tag = ID3v1.create_tag_string(self.final)
+        id3v2_tag = ID3v2.create_tag_string(self.final, self.file_path)
+        with open(output_file_path, "wb") as f:
+            f.write(id3v2_tag + track_data + id3v1_tag)
+
+
