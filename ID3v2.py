@@ -141,9 +141,9 @@ class _TagHeader(object):
         Args:
             header_data: character array of bytes representing the tag header
         """
-        # Check we're actually looking at an ID3 tag
+        # Check we're actually looking at an ID3v2 tag
         if header_data[:3] != "ID3":
-            raise Exception("Given data does not contain a tag header")
+            raise Exception("Given data does not contain an ID3v2 tag header")
         # Extract version number and assert it's supported
         self.version = ord(header_data[3])
         self.version_minor = ord(header_data[4])
@@ -242,6 +242,12 @@ class _TagExtendedHeader(object):
         # Ensure flags are valid
         if unknown_flags != 0:
             raise Exception("Unknown flags '0x%02X' (should be 0)" % (unknown_flags))
+
+    def __str__(self):
+        """Override string printing method"""
+        set_flags = [flag for flag in self.flags if self.flags[flag]]
+        return "ExtendedHeader Size=%d %s" % (self.body_size, ','.join(set_flags))
+
 
 
 class _FrameHeader(object):
@@ -348,7 +354,7 @@ class _Tag(object):
 
     Attributes:
         header: _TagHeader ID3v2 tag header
-        extended_header: _TagExtendedHeader ID3v2 tag extended header
+        extended_header: _TagExtendedHeader ID3v2 tag extended header, or None
         frames: list of _FrameHeader ID3v2 tag frame headers
     """
     def __init__(self, file_handle):
@@ -385,6 +391,15 @@ class _Tag(object):
             frame = _FrameHeader(self.header.version, fheader_data, file_handle.tell())
             self.__add_frame(frame)
             file_handle.seek(frame.body_size, 1)
+
+    def __str__(self):
+        """Override string printing method"""
+        frames_str = '\n  '.join([str(frame) for frame in self.frames])
+        if self.extended_header:
+            return "%s\n  %s\n  %s" % (str(self.header), str(self.extended_header), \
+                                       frames_str)
+        else:
+            return "%s\n  %s" % (self.header, frames_str)
 
     def __add_frame(self, frame):
         """Adds the frame header to this tag
@@ -518,6 +533,23 @@ class _Tag(object):
             return TrackData.mint(body_data[0:4])
         return None
 
+    def get_data(self, file_handle):
+        """Extracts TrackData from this tag
+
+        Args:
+            file_handle: open file handle to read the relevant frames from
+
+        Returns:
+            TrackData with this tag's raw data
+        """
+        data = TrackData.TrackData()
+        data.artist = self.get_artist(file_handle)
+        data.album = self.get_album(file_handle)
+        data.title = self.get_title(file_handle)
+        data.track = self.get_track(file_handle)
+        data.year = self.get_year(file_handle)
+        return data
+
 
 def _read_frame_text(body_data):
     """Parses a textual frame body as a python string
@@ -583,12 +615,7 @@ def read_tag_data(file_path):
             return data
         # Parse the tag
         tag = _Tag(f)
-        # Collect frame info
-        data.artist = tag.get_artist(f)
-        data.album = tag.get_album(f)
-        data.title = tag.get_title(f)
-        data.track = tag.get_track(f)
-        data.year = tag.get_year(f)
+        data = tag.get_data(f)
         # clean the strings generated
         data.clean(False) # TODO: This was previously True - correct?
     return data

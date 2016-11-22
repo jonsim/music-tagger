@@ -169,7 +169,6 @@ class TrackFile(object):
         final.artist = finalise_str(self.fp.artist, self.v1.artist, self.v2.artist)
         final.track = finalise_int(self.fp.track, self.v1.track, self.v2.track)
         final.year = finalise_int(self.fp.year, self.v1.year, self.v2.year)
-        final.genre = finalise_int(None, self.v1.genre, self.v2.genre)
         self.final = final
         self.finalised = True
 

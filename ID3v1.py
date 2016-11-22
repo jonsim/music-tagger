@@ -39,6 +39,65 @@ def _pack_null_bytes(string, length):
     return data
 
 
+class _Tag(object):
+    """ID3v1 tag
+
+    Attributes:
+        version: int major version number (e.g. 0 for ID3v1.0)
+        data: TrackData from this header
+        comment: string tag comment
+        genre: int track genre (non standard)
+        is_extended: boolean representing whether or not parsed tag had an
+            extended tag
+    """
+    def __init__(self, header_data, xheader_data):
+        """Interprets byte data as a tag header to build object
+
+        Args:
+            header_data: character array of bytes representing the tag header.
+                Must contain an ID3v1 tag
+            xheader_data: character array of bytes representing the extended tag
+                header. This does not have to contain an extended header (in
+                which case it will be ignored).
+        """
+        # Check we're actually looking at an ID3v1 tag
+        if header_data[:3] != "TAG":
+            raise Exception("Given data does not contain an ID3v1 tag header")
+        # Extract data
+        self.data = TrackData.TrackData()
+        self.data.title = _strip_null_bytes(header_data[3:33])
+        self.data.artist = _strip_null_bytes(header_data[33:63])
+        self.data.album = _strip_null_bytes(header_data[63:93])
+        self.data.year = TrackData.mint(_strip_null_bytes(header_data[93:97]))
+        if ord(header_data[125]) == 0 and ord(header_data[126]) != 0:
+            self.version = 1    # id3 v1.1
+            self.comment = _strip_null_bytes(header_data[97:125])
+            self.data.track = ord(header_data[126])
+        else:
+            self.version = 0    # id3 v1.0
+            self.comment = _strip_null_bytes(header_data[97:127])
+            self.data.track = None
+        self.genre = ord(header_data[127])
+        # Check if we have an extended tag and extract it
+        self.is_extended = xheader_data[:4] == "TAG+"
+        if self.is_extended:
+            self.data.title += _strip_null_bytes(xheader_data[4:64])
+            self.data.artist += _strip_null_bytes(xheader_data[64:124])
+            self.data.album += _strip_null_bytes(xheader_data[124:184])
+
+    def __str__(self):
+        """Override string printing method"""
+        return "ID3v1.%d%s" % (self.version, '+' if self.is_extended else '')
+
+    def get_data(self):
+        """Extracts TrackData from this tag
+
+        Returns:
+            TrackData with this tag's raw data
+        """
+        return self.data
+
+
 def calculate_tag_size(file_handle):
     """Calculates the size of an ID3v1 tag
 
@@ -84,32 +143,15 @@ def read_tag_data(file_path):
         tagx_data = f.read(227)
         # Read the final 128 bytes that would make up the id3v1 tag.
         tag_data = f.read(128)
-
-        # See what juicy goodies we have.
-        if tag_data[:3] == "TAG":
-            # Either id3 v1.0 or v1.1
-            data.title = _strip_null_bytes(tag_data[3:33])
-            data.artist = _strip_null_bytes(tag_data[33:63])
-            data.album = _strip_null_bytes(tag_data[63:93])
-            data.year = None
-            if tag_data[93:97] != "\00\00\00\00":
-                data.year = TrackData.mint(_strip_null_bytes(tag_data[93:97]))
-            data.genre = ord(tag_data[127])
-            if ord(tag_data[125]) == 0 and ord(tag_data[126]) != 0:
-                # id3 v1.1
-                #comment = strip_null_bytes(tag_data[97:125])
-                data.track = ord(tag_data[126])
-            else:
-                # id3 v1.0
-                #comment = strip_null_bytes(tag_data[97:127])
-                data.track = None
-            # check for extended tag and, if found, append to the data.
-            if tagx_data[:4] == "TAG+":
-                data.title += _strip_null_bytes(tagx_data[4:64])
-                data.artist += _strip_null_bytes(tagx_data[64:124])
-                data.album += _strip_null_bytes(tagx_data[124:184])
-            # clean the strings generated
-            data.clean(False) # TODO: This was originally True - correct?
+        has_tag = tag_data[:3] == "TAG"
+        # If we don't have a tag, drop out
+        if not has_tag:
+            return data
+        # Parse the tag
+        tag = _Tag(tag_data, tagx_data)
+        data = tag.get_data()
+        # clean the strings generated
+        data.clean(False) # TODO: This was previously True - correct?
     return data
 
 

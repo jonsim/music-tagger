@@ -12,14 +12,12 @@ class TrackData(object):
         artist: string track artist, None if not present
         track: int track number, None if not present
         year: int track year, None if not present
-        genre: int track genre, None if not present
     """
     title = None
     album = None
     artist = None
     track = None
     year = None
-    genre = None
 
     def __str__(self):
         """Override default str method """
@@ -109,7 +107,7 @@ def clean_string(string, aggressive_cleaning=False):
     words = string.split()
 
     # fix the capitalisation.
-    title_case_exceptions = ['and', 'at', 'of', 'or', 'the']
+    title_case_exceptions = ['a', 'and', 'at', 'of', 'or', 'the']
     for i in range(len(words)):
         if (i == 0) or (words[i] not in title_case_exceptions):
             words[i] = words[i][0].upper() + words[i][1:]
