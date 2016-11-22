@@ -132,10 +132,9 @@ def read_tag_data(file_path):
 
     Returns:
         A TrackData with the fields initialised to the data read from the tag.
-        Non-present fields will be initialised to None. If no v1.0 or v1.1 tag
-        exists all fields will be None.
+        Non-present fields will be initialised to None. If no valid tag exists
+        None will be returned.
     """
-    data = TrackData.TrackData()
     with open(file_path, "rb", 0) as f:
         # Go to the (128+227)th byte before the end.
         f.seek(-(128+227), 2)
@@ -146,13 +145,14 @@ def read_tag_data(file_path):
         has_tag = tag_data[:3] == "TAG"
         # If we don't have a tag, drop out
         if not has_tag:
-            return data
+            return None
         # Parse the tag
         tag = _Tag(tag_data, tagx_data)
         data = tag.get_data()
         # clean the strings generated
-        data.clean(False) # TODO: This was previously True - correct?
-    return data
+        data.clean(False)
+        return data
+    return None
 
 
 def create_tag_string(data):

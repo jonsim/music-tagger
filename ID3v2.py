@@ -605,20 +605,20 @@ def read_tag_data(file_path):
     Returns:
         A TrackData with the fields initialised to the data read from the tag.
         Non-present fields will be initialised to None. If no valid tag exists
-        all fields will be None.
+        None will be returned.
     """
-    data = TrackData.TrackData()
     with open(file_path, "rb", 0) as f:
         has_tag = f.read(3) == "ID3"
         # If we don't have a tag, drop out
         if not has_tag:
-            return data
+            return None
         # Parse the tag
         tag = _Tag(f)
         data = tag.get_data(f)
         # clean the strings generated
-        data.clean(False) # TODO: This was previously True - correct?
-    return data
+        data.clean(False)
+        return data
+    return None
 
 
 def create_tag_string(data, file_path):

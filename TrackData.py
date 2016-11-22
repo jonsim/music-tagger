@@ -107,7 +107,7 @@ def clean_string(string, aggressive_cleaning=False):
     words = string.split()
 
     # fix the capitalisation.
-    title_case_exceptions = ['a', 'and', 'at', 'of', 'or', 'the']
+    title_case_exceptions = ['a', 'and', 'at', 'of', 'or', 'the', 'to']
     for i in range(len(words)):
         if (i == 0) or (words[i] not in title_case_exceptions):
             words[i] = words[i][0].upper() + words[i][1:]
