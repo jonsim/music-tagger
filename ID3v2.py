@@ -376,7 +376,7 @@ class _Tag(object):
         else:
             self.extended_header = None
         # Read frames
-        self.frames = []
+        self.frames = {}
         while file_handle.tell() < total_size:
             fheader_data = file_handle.read(self.header.frame_header_size)
             if fheader_data[0] == '\0':
@@ -410,7 +410,7 @@ class _Tag(object):
         Returns:
             None
         """
-        self.frames.append(frame)
+        self.frames[frame.id] = frame
 
     def __get_frame(self, frame_id):
         """Retrieves the frame header with the given ID
@@ -421,10 +421,10 @@ class _Tag(object):
         Returns:
             _FrameHeader frame header
         """
-        for frame in self.frames:
-            if frame.id == frame_id:
-                return frame
-        return None
+        try:
+            return self.frames[frame_id]
+        except KeyError:
+            return None
 
     def get_artist(self, file_handle):
         """Retrieves the track artist data from this tag
