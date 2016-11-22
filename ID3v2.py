@@ -56,6 +56,14 @@ _EXPERIMENTAL_FRAME_ID_PREFIXS = ["X", "Y", "Z"]
 
 
 def _read_32bit_syncsafe(byte_data):
+    """Reads a 32-bit syncsafe integer (28 bits with 4 sync bits zeroed out)
+
+    Args:
+        byte_data: character array of bytes. Must be 4 bytes long
+
+    Returns:
+        unsigned int representation of the byte data
+    """
     int_bytes = [ord(b) for b in byte_data]
     if (int_bytes[0] & 0x80) or \
        (int_bytes[1] & 0x80) or \
@@ -69,6 +77,14 @@ def _read_32bit_syncsafe(byte_data):
 
 
 def _read_32bit_nonsyncsafe(byte_data):
+    """Reads a standard 32-bit unsigned integer
+
+    Args:
+        byte_data: character array of bytes. Must be 4 bytes long
+
+    Returns:
+        unsigned int representation of the byte data
+    """
     int_bytes = [ord(b) for b in byte_data]
     return (int_bytes[0] << 24) \
          + (int_bytes[1] << 16) \
@@ -77,6 +93,14 @@ def _read_32bit_nonsyncsafe(byte_data):
 
 
 def _read_24bit_nonsyncsafe(byte_data):
+    """Reads a standard 24-bit unsigned integer
+
+    Args:
+        byte_data: character array of bytes. Must be 3 bytes long
+
+    Returns:
+        unsigned int representation of the byte data
+    """
     int_bytes = [ord(b) for b in byte_data]
     return (int_bytes[0] << 16) \
          + (int_bytes[1] <<  8) \
@@ -84,6 +108,14 @@ def _read_24bit_nonsyncsafe(byte_data):
 
 
 def _read_16bit_nonsyncsafe(byte_data):
+    """Reads a standard 16-bit unsigned integer
+
+    Args:
+        byte_data: character array of bytes. Must be 2 bytes long
+
+    Returns:
+        unsigned int representation of the byte data
+    """
     int_bytes = [ord(b) for b in byte_data]
     return (int_bytes[0] <<  8) \
          + (int_bytes[1])
@@ -104,6 +136,11 @@ class _TagHeader(object):
         frame_header_size: int byte size of this version's frame header size.
     """
     def __init__(self, header_data):
+        """Interprets byte data as a tag header to build object
+
+        Args:
+            header_data: character array of bytes representing the tag header
+        """
         # Check we're actually looking at an ID3 tag
         if header_data[:3] != "ID3":
             raise Exception("Given data does not contain a tag header")
@@ -150,11 +187,17 @@ class _TagHeader(object):
 
 
     def __str__(self):
+        """Override string printing method"""
         set_flags = [flag for flag in self.flags if self.flags[flag]]
         return "ID3v2.%d.%d Size=%d %s" % (self.version, self.version_minor,
                                            self.body_size, ','.join(set_flags))
 
     def has_extended_header(self):
+        """Whether or not this the tag has an extended header
+
+        Returns:
+            bool, True if the tag has an extended header, False otherwise
+        """
         if 'extended_header' in self.flags:
             return self.flags['extended_header'] != 0
         return False
@@ -170,6 +213,13 @@ class _TagExtendedHeader(object):
         flags: dictionary mapping strings to bools for each available flag
     """
     def __init__(self, version, xheader_data):
+        """Interprets byte data as an extended tag header to build object
+
+        Args:
+            version: int version of the tag this frame was read from
+            xheader_data: character array of bytes representing the extended tag
+                header
+        """
         self.flags = {}
         self.version = version
         if version == 3:
@@ -200,12 +250,19 @@ class _FrameHeader(object):
     Attributes:
         id: string id of the frame
         version: int version of the tag this frame was read from
-        body_offset: the file offset of this frame's body
+        body_offset: the absolute file offset of this frame's body
         header_size: int byte size of header data
         body_size: int byte size of all non-header data in the frame
         flags: dictionary mapping strings to bools for each available flag
     """
     def __init__(self, version, header_data, offset):
+        """Interprets byte data as a frame header to build object
+
+        Args:
+            version: int version of the tag this frame was read from
+            header_data: character array of bytes representing the tag header
+            offset: int absolute file offset of this frame's body
+        """
         self.flags = {}
         self.version = version
         self.body_offset = offset
@@ -264,30 +321,51 @@ class _FrameHeader(object):
         # TODO: Handle unsupported flags
         # Ensure flags are valid
         if unknown_flags != 0:
-            raise Exception("Unknown ID3v2.%d Flags '0x%04X' (should be 0)" % (self.version, unknown_flags))
+            raise Exception("Unknown ID3v2.%d Flags '0x%04X' (should be 0)" % \
+                (self.version, unknown_flags))
 
     def __str__(self):
+        """Override string printing method"""
         set_flags = [flag for flag in self.flags if self.flags[flag]]
         return "%s Size=%d %s" % (self.id, self.body_size, ','.join(set_flags))
 
     def read_body(self, file_handle):
+        """Reads this frame's body content from the file
+
+        Args:
+            file_handle: file handle to read the data from. Must be opened at
+                least as 'rb'.
+
+        Returns:
+            character byte array of data from the frame's body
+        """
         file_handle.seek(self.body_offset, 0)
         return file_handle.read(self.body_size)
 
 
 class _Tag(object):
+    """ID3v2 tag
+
+    Attributes:
+        header: _TagHeader ID3v2 tag header
+        extended_header: _TagExtendedHeader ID3v2 tag extended header
+        frames: list of _FrameHeader ID3v2 tag frame headers
+    """
     def __init__(self, file_handle):
+        """Reads an ID3v2 tag from a file. File must contain a tag.
+
+        Args:
+            file_handle: file handle open in at least 'rb' mode to read tag from
+        """
         file_handle.seek(0, 0)
         # Read header
         header_data = file_handle.read(10)
         self.header = _TagHeader(header_data)
-        print str(self.header)
         total_size = self.header.header_size + self.header.body_size
         # Read extended header (if applicable)
         if self.header.has_extended_header():
             xheader_data = file_handle.read(self.header.extended_header_size)
             self.extended_header = _TagExtendedHeader(self.header.version, xheader_data)
-            print '  ' + str(self.extended_header)
             file_handle.seek(self.extended_header.body_size, 1)
         else:
             self.extended_header = None
@@ -305,17 +383,43 @@ class _Tag(object):
                 # bytes while actual allocation is around 4200 bytes per tag.
                 break
             frame = _FrameHeader(self.header.version, fheader_data, file_handle.tell())
-            print '    ' + str(frame)
-            self.frames.append(frame)
+            self.__add_frame(frame)
             file_handle.seek(frame.body_size, 1)
 
-    def _get_frame(self, frame_id):
+    def __add_frame(self, frame):
+        """Adds the frame header to this tag
+
+        Args:
+            frame: _FrameHeader frame header to add
+
+        Returns:
+            None
+        """
+        self.frames.append(frame)
+
+    def __get_frame(self, frame_id):
+        """Retrieves the frame header with the given ID
+
+        Args:
+            frame_id: ID of the frame header to retrieve
+
+        Returns:
+            _FrameHeader frame header
+        """
         for frame in self.frames:
             if frame.id == frame_id:
                 return frame
         return None
 
     def get_artist(self, file_handle):
+        """Retrieves the track artist data from this tag
+
+        Args:
+            file_handle: open file handle to read the frame body from
+
+        Returns:
+            string track artist or None if this tag doesn't contain it
+        """
         version = self.header.version
         if version == 2:
             frame_id = "TP1"
@@ -323,12 +427,20 @@ class _Tag(object):
             frame_id = "TPE1"
         else:
             return None
-        frame = self._get_frame(frame_id)
+        frame = self.__get_frame(frame_id)
         if frame:
             return _read_frame_text(frame.read_body(file_handle))
         return None
 
     def get_album(self, file_handle):
+        """Retrieves the track album data from this tag
+
+        Args:
+            file_handle: open file handle to read the frame body from
+
+        Returns:
+            string track album or None if this tag doesn't contain it
+        """
         version = self.header.version
         if version == 2:
             frame_id = "TAL"
@@ -336,12 +448,20 @@ class _Tag(object):
             frame_id = "TALB"
         else:
             return None
-        frame = self._get_frame(frame_id)
+        frame = self.__get_frame(frame_id)
         if frame:
             return _read_frame_text(frame.read_body(file_handle))
         return None
 
     def get_title(self, file_handle):
+        """Retrieves the track title data from this tag
+
+        Args:
+            file_handle: open file handle to read the frame body from
+
+        Returns:
+            string track title or None if this tag doesn't contain it
+        """
         version = self.header.version
         if version == 2:
             frame_id = "TT2"
@@ -349,12 +469,20 @@ class _Tag(object):
             frame_id = "TIT2"
         else:
             return None
-        frame = self._get_frame(frame_id)
+        frame = self.__get_frame(frame_id)
         if frame:
             return _read_frame_text(frame.read_body(file_handle))
         return None
 
     def get_track(self, file_handle):
+        """Retrieves the track number from this tag
+
+        Args:
+            file_handle: open file handle to read the frame body from
+
+        Returns:
+            int track number or None if this tag doesn't contain it
+        """
         version = self.header.version
         if version == 2:
             frame_id = "TRK"
@@ -362,13 +490,21 @@ class _Tag(object):
             frame_id = "TRCK"
         else:
             return None
-        frame = self._get_frame(frame_id)
+        frame = self.__get_frame(frame_id)
         if frame:
             body_data = _read_frame_text(frame.read_body(file_handle))
             return TrackData.mint(body_data.split('/')[0])
         return None
 
     def get_year(self, file_handle):
+        """Retrieves the track year from this tag
+
+        Args:
+            file_handle: open file handle to read the frame body from
+
+        Returns:
+            int track year or None if this tag doesn't contain it
+        """
         version = self.header.version
         if version == 2:
             frame_id = "TYE"
@@ -376,13 +512,22 @@ class _Tag(object):
             frame_id = "TYER"
         else:
             return None
-        frame = self._get_frame(frame_id)
+        frame = self.__get_frame(frame_id)
         if frame:
             body_data = _read_frame_text(frame.read_body(file_handle))
             return TrackData.mint(body_data[0:4])
         return None
 
+
 def _read_frame_text(body_data):
+    """Parses a textual frame body as a python string
+
+    Args:
+        body_data: character array of bytes read from the frame body
+
+    Returns:
+        python string, decoded according to its character encoding
+    """
     encoding = ord(body_data[0])
     # TODO: Deal with unicode properly (not using encode('ascii', 'replace'))
     if encoding == 0:   # ISO-8859-1
@@ -437,7 +582,6 @@ def read_tag_data(file_path):
         if not has_tag:
             return data
         # Parse the tag
-        print file_path
         tag = _Tag(f)
         # Collect frame info
         data.artist = tag.get_artist(f)
