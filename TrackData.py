@@ -72,6 +72,7 @@ def mint(string):
     except ValueError:
         return None
 
+TITLE_CASE_EXCEPTIONS = ['a', 'at', 'by', 'in', 'of', 'or', 'to', 'and', 'the']
 
 def clean_string(string, aggressive_cleaning=False):
     """Cleans a string of weird punctuation or whitespace substitution.
@@ -91,37 +92,37 @@ def clean_string(string, aggressive_cleaning=False):
     Returns:
         The cleaned up string.
     """
-    # replace any of '.-_' with spaces (minus the last . for file extension).
-    if string[-4:] == '.mp3':
-        number_of_dots = string.count('.')
-        string = string.replace('.', ' ', number_of_dots-1)
-    else:
-        string = string.replace('.', ' ')
-    string = string.replace('-', ' ')
-    string = string.replace('_', ' ')
-
     # lower the case.
     string = string.lower()
 
-    # split the string into words (this will also remove duplicate spaces).
-    words = string.split()
+    # if it's a filename, strip off the extension for later
+    if string[-4:] == '.mp3':
+        suffix = '.mp3'
+        string = string[:-4]
+    else:
+        suffix = ''
+    # replace any of '.-_' with spaces
+    string = string.replace('.', ' ')
+    string = string.replace('-', ' ')
+    string = string.replace('_', ' ')
+
+    # split the string into words and remove empty words (from duplicate spaces)
+    words = [word for word in string.split() if word]
 
     # fix the capitalisation.
-    title_case_exceptions = ['a', 'and', 'at', 'of', 'or', 'the', 'to']
-    for i in range(len(words)):
-        if (i == 0) or (words[i] not in title_case_exceptions):
-            words[i] = words[i][0].upper() + words[i][1:]
+    words[0] = words[0].title()
+    for i in range(1, len(words)):
+        if words[i] not in TITLE_CASE_EXCEPTIONS:
+            words[i] = words[i].title()
 
     # recombine the words into a string.
-    string = " ".join(words)
+    string = ' '.join(words)
 
     # specific additional cleaning methods for removing the detritus that
     # commonly inhabits file names. this should only be performed on filenames
     # because it removes things like [...], which, in the context of album
     # folders frequently gives the publication year.
     if aggressive_cleaning:
-        split = re.split(r'\[.*?\]', string)
-        string = ' '.join(split)
-        string = ' '.join(string.split())
+        string = ' '.join(re.split(r'\[.*\]', string))
 
-    return string
+    return string + suffix

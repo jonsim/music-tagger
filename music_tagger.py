@@ -86,59 +86,86 @@ class CleanFilename(object):
 
 
 def remove_common_words(file_list):
-    """ Removes words repeated in the same place in all strings in a list.
+    """ Removes words repeated in the same place in all filenames in a list.
 
     This is necessary in the context of song filenames to undo filenames which
     include the artist or album name.
 
     Args:
-        file_list: list of CleanFilename. The cleaned field will be used for
-            comparison. The list is modified in place.
+        file_list: list of CleanFilename to mp3s. The cleaned field will be used
+            for comparison. The list is modified in place.
 
     Returns:
         A list of CleanFilenames with the common words removed.
     """
+    def _remove_common_words(word_list, word_count, file_count, forwards, max_indent):
+        """Passes through a list of list of words and removes duplicates
 
-    # Split each of the strings in the list into a list of words.
-    word_list = [(f.cleaned.split()) for f in file_list]
+        Args:
+            word_list: list of list of strings to remove common words from
+            word_count: int number of words to check up to
+            file_count: int number of list of words to check up to
+            fowards: boolean, True to scan through the words forwards (aligning
+                all filenames on word[0] and checking incrementally from there)
+                or False to scan backwards (aligning all filenames on word[-1]
+                and checking decrementally from there)
+            max_indent: int maximum word position which may be passed over if it
+                does not match all files without being removed. Positive int, 0
+                for no indent (i.e. break immediately)
+        """
+        if forwards:
+            word_scan_order = range(word_count)
+        else:
+            word_scan_order = range(-1, -word_count-1, -1)
+            # L[0] is 1st element forwards while L[-1] is 1st element backwards
+            max_indent += 1
+        # For each of the possible shared words in the strings, check against
+        # the first word for repetition, removing any that appear in the same
+        # place in every word. The run must be at the start (forwards) or end
+        # (backwards) of the string, or up to max_indent offset from the start
+        # (forwards) or end (backwards).
+        for word_idx in word_scan_order:
+            all_words_match = True
+            for file_idx in range(1, file_count):
+                if word_list[0][word_idx] != word_list[file_idx][word_idx]:
+                    all_words_match = False
+                    break
+            if all_words_match:
+                for file_idx in range(file_count):
+                    word_list[file_idx][word_idx] = ''
+            elif abs(word_idx) >= max_indent:
+                break
+
+    # Split each of the strings in the list into a list of words (ignoring the
+    # last 4 characters which will be .mp3)
+    word_list = [f.cleaned[:-4].split() for f in file_list]
 
     # Calculate the number of words in the shortest string.
     len_shortest_string = len(min(word_list, key=len))
-
-    # For each of the possible shared words in the strings, check against the
-    # first word for repetition, removing any that appear in the same place in
-    # every word (though only if the run is at the start of the string (or 1
-    # indented)).
     file_count = len(file_list)
-    for i in range(len_shortest_string):
-        all_words_match = True
-        for j in range(1, file_count):
-            if word_list[0][i] != word_list[j][i]:
-                all_words_match = False
-                break
-        if all_words_match:
-            for k in range(file_count):
-                word_list[k][i] = ""
-        elif i > 0:
-            break
+    # Remove all matching words from the start of the filenames (or 1 offset)
+    _remove_common_words(word_list, len_shortest_string, file_count, True, 1)
+    # Remove all matching words from the end of the filenames
+    _remove_common_words(word_list, len_shortest_string, file_count, False, 0)
 
     # Recombine the words for each file into a single name (removing additional
-    # spaces) and overwrite the cleaned field.
+    # spaces), re-add the .mp3 and overwrite the cleaned field.
     for i in range(file_count):
-        file_list[i].cleaned = ' '.join([(w) for w in word_list[i] if w])
+        file_list[i].cleaned = ' '.join([(w) for w in word_list[i] if w]) + '.mp3'
 
     return file_list
 
 
-def clean_folder(file_list):
-    """ Cleans all filenames given and removes common words from them.
+def extract_mp3s_and_clean(file_list):
+    """Extracts all mp3s from a filelist and and removes common words from them
 
     Args:
         file_list: list of strings representing filenames
 
     Returns:
-        A list of CleanFilenames
+        A list of mp3 CleanFilenames. May be empty if no mp3s were found
     """
+    file_list = [f for f in file_list if f[-4:].lower() == '.mp3']
     if not file_list:
         return []
     cleaned_file_list = [(CleanFilename(f)) for f in file_list]
@@ -218,13 +245,13 @@ def main():
     Progress.state(SEARCHING_STATUS_STRING)
     track_list = []
     for dirname, subdirnames, filenames in os.walk(args.directory):
-        cleaned_filenames = clean_folder(filenames)
-        for f in cleaned_filenames:
-            if f.original[-4:] == '.mp3':
-                # Extract all the information possible from the song and add it.
-                file_path = os.path.join(dirname, f.original)
-                new_file = TrackFile.TrackFile(file_path, f.cleaned)
-                track_list.append(new_file)
+        # Extract and clean filenames of all mp3s
+        cleaned_mp3_filenames = extract_mp3s_and_clean(filenames)
+        for f in cleaned_mp3_filenames:
+            # Extract all the information possible from the song and add it.
+            file_path = os.path.join(dirname, f.original)
+            new_file = TrackFile.TrackFile(file_path, f.cleaned)
+            track_list.append(new_file)
     track_count = len(track_list)
 
     # create storage system
@@ -233,6 +260,7 @@ def main():
     # Add all located files to the collection.
     for i in range(track_count):
         track_list[i].load_all_data()
+        #print track_list[i]
         track_list[i].finalise_data()
         music_collection.add(track_list[i])
         Progress.report(INDEXING_STATUS_STRING, track_count, i+1)

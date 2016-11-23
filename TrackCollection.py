@@ -37,8 +37,14 @@ class TrackCollection(object):
 
     def __str__(self):
         s = "---- Album Dictionary Mappings ----\n"
-        for artist in self.collection:
-            for album in self.collection[artist]:
+        # List artists and sort
+        artists = self.collection.keys()
+        artists.sort()
+        for artist in artists:
+            # List albums and sort
+            albums = self.collection[artist].keys()
+            albums.sort(key=lambda k2, k1=artist: self.collection[k1][k2][0].final.year)
+            for album in albums:
                 s += "[%s][%s]\n" % (artist, album)
                 for song in self.collection[artist][album]:
                     s += "  %02d %s\n" % (song.final.track, song.final.title)
