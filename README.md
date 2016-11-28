@@ -42,13 +42,15 @@ identified and stored in <code>Various Artists/ALBUM/SONG.mp3</code> and will no
 License
 -------
 The project is released under the GPLv3 license.
-This project also makes use of the [Levenshtein Python Extension], released under the GPLv2 license.
+This project also makes use of the [Levenshtein Python Extension], released under the GPLv2 license and the [enum34 Extension], released under the BSD License
 
 [Levenshtein Python Extension]: http://code.google.com/p/pylevenshtein/ "Levenshtein Python Extensions at Google Code"
+[enum34 Extension]: https://pypi.python.org/pypi/enum34 "enum34 1.1.6 Extension at pypi"
 
 
 To Do
 -----
+- Clean up dependency packaging
 - Add some type of voting procedure to decide on the correct album/artist name from files within the
   same folder.
 - Implement the non-forced directory mode for when the directory structure cannot be relied upon.
