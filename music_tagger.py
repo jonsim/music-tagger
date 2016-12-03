@@ -37,7 +37,7 @@
 """Imports:
     sys: console output
     os: walking the directory structure
-    argparse: parsing command line arguments and providing help
+    Config: handling program config options from files or command line args
     TrackData: storing data from a single source about a track
     TrackFile: collecting all a track's TrackData together
     TrackCollection: collecting all TrackFiles under in the searched directory
@@ -45,7 +45,7 @@
 """
 import sys
 import os
-import argparse
+import Config
 import TrackData
 import TrackFile
 import TrackCollection
@@ -214,27 +214,8 @@ def print_warnings(warnings):
 #-----------------------------------------------------------------------#
 def main():
     """Main function"""
-    parser = argparse.ArgumentParser(description=\
-        'A small program to tidy music files. It recursively explores a given '
-        'directory and standardises folder structures, file naming conventions '
-        'and ID3 tags.')
-    parser.add_argument('directory', help=\
-        'directory to recursively search for music files in')
-    parser.add_argument('-v', '--verbose', action='store_true', help=\
-        'verbose mode')
-    parser.add_argument('-f', '--write', action='store_true', help=\
-        'write changes to disk. Default is to do a dry run (no file changes)')
-    parser.add_argument('-d', '--directory-mode', action='store_true', help=\
-        'force the directory structure to be the ground truth, using its '
-        'structure (artist/album/song.mp3) for the tag')
-    args = parser.parse_args()
-    # Parse command line arguments.
-    if not args.directory_mode:
-        print 'Error: directory mode (-d) is not enabled (i.e. you are telling\n' \
-              'the program you have a mismatched folder structure), however the\n'\
-              'functionality to deal with this scenario has not yet been\n' \
-              'implemented. Sorry!'
-        sys.exit()
+    # Build program config from command line and config file.
+    config = Config.Config()
 
     warnings = []
 
@@ -244,7 +225,7 @@ def main():
     #  * filenames gives the list of files in the folder
     Progress.state(SEARCHING_STATUS_STRING)
     track_list = []
-    for dirname, subdirnames, filenames in os.walk(args.directory):
+    for dirname, subdirnames, filenames in os.walk(config.directory):
         # Extract and clean filenames of all mp3s
         cleaned_mp3_filenames = extract_mp3s_and_clean(filenames)
         for f in cleaned_mp3_filenames:
@@ -280,18 +261,18 @@ def main():
     music_collection.standardise_album_tracks(warnings, progress_stub2)
     print_warnings(warnings)
 
-    if args.verbose:
+    if config.verbose:
         music_collection.sort_songs_by_track()
         print music_collection
 
-    if args.write:
+    if config.dry_run:
+        Progress.skip(REWRITING_STATUS_STRING)
+    else:
         print "TBD"
         # write the newly corrected data to a new file system with new tags
         #new_folder = generate_new_filepath(args.directory)
         #print "Creating new directory structure in %s." % (new_folder)
         #music_collection.create_new_filesystem(new_folder)
-    else:
-        Progress.skip(REWRITING_STATUS_STRING)
 
     # done
     print "Finished."
